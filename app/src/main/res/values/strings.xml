@@ -5,4 +5,29 @@
     values-round/strings.xml for round devices.
     -->
     <string name="hello_world">From the Square world,\nHello, %1$s!</string>
+
+    <!-- Timer segments -->
+    <string name="segment_intro">Intro</string>
+    <string name="segment_main">Main</string>
+    <string name="segment_outro">Outro</string>
+    <string name="segment_short">I/M/O</string>
+
+    <!-- Timer states -->
+    <string name="timer_done">Done</string>
+    <string name="timer_completed">Completed</string>
+
+    <!-- Notification -->
+    <string name="remaining_time">Remaining: %1$d:%2$02d</string>
+
+    <!-- Actions -->
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_skip">Skip</string>
+    <string name="action_stop">Stop</string>
+
+    <!-- UI -->
+    <string name="presets_title">Presets</string>
+    <string name="add_preset">Add Preset</string>
+    <string name="default_label">Default</string>
+    <string name="set_default">Set Default</string>
 </resources>
