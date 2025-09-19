@@ -1,69 +1,15 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-
-    <!-- Crown and pushers -->
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFBE46">
+  <group android:scaleX="1.0498"
+      android:scaleY="1.0498"
+      android:translateX="-0.5976"
+      android:translateY="-0.5976">
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M46,6h16a4,4 0 0 1 4,4v10h-24V10a4,4 0 0 1 4,-4z" />
-
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M30,14a6,6 0 1 0 12,0a6,6 0 1 0 -12,0z" />
-
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M66,14a6,6 0 1 0 12,0a6,6 0 1 0 -12,0z" />
-
-    <!-- Outer case -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M54,10c24.301,0 44,19.699 44,44s-19.699,44 -44,44 -44,-19.699 -44,-44 19.699,-44 44,-44z" />
-
-    <!-- Inner dial -->
-    <path
-        android:fillColor="#000000"
-        android:pathData="M54,16c21.816,0 38,16.184 38,38s-16.184,38 -38,38 -38,-16.184 -38,-38 16.184,-38 38,-38z" />
-
-    <!-- Timer segments -->
-    <path
-        android:fillColor="#6FC35C"
-        android:pathData="M54,54 L21.092,73 A38,38 0 0 1 54,16 Z" />
-
-    <path
-        android:fillColor="#2D8FFF"
-        android:pathData="M54,54 L54,16 A38,38 0 0 1 86.908,73 Z" />
-
-    <path
-        android:fillColor="#F95B47"
-        android:pathData="M54,54 L86.908,73 A38,38 0 0 1 21.092,73 Z" />
-
-    <!-- Segment dividers -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M54,16 L54,54" />
-
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M54,54 L21.092,73" />
-
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M54,54 L86.908,73" />
-
-    <!-- Center hub -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M54,48a6,6 0 1 1 0,12a6,6 0 1 1 0,-12z" />
+        android:fillColor="@android:color/white"
+        android:pathData="M19,3H5C3.9,3 3,3.9 3,5v14c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2V5C21,3.9 20.1,3 19,3zM12,17H6v-2h6V17zM15,13H9v-2h6V13zM18,9h-6V7h6V9z"/>
+  </group>
 </vector>
