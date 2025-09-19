@@ -31,6 +31,9 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _defaultPresetId = MutableStateFlow<String?>(null)
     val defaultPresetId: StateFlow<String?> = _defaultPresetId.asStateFlow()
 
+    private val _editorTargetPreset = MutableStateFlow<Preset?>(null)
+    val editorTargetPreset: StateFlow<Preset?> = _editorTargetPreset.asStateFlow()
+
     init {
         loadData()
         observeTimerState()
@@ -71,6 +74,16 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         _currentScreen.value = Screen.PresetList
     }
 
+    fun openPresetEditor(preset: Preset?) {
+        _editorTargetPreset.value = preset
+        _currentScreen.value = Screen.PresetEditor
+    }
+
+    fun closePresetEditor() {
+        _editorTargetPreset.value = null
+        _currentScreen.value = Screen.PresetList
+    }
+
     // Timer actions
     fun startTimer(preset: Preset) {
         TimerService.startService(getApplication(), preset.id)
@@ -105,6 +118,14 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             dataRepository.savePreset(preset)
         }
+    }
+
+    fun startAddPresetFlow() {
+        openPresetEditor(null)
+    }
+
+    fun startEditPresetFlow(preset: Preset) {
+        openPresetEditor(preset)
     }
 
     fun deletePreset(presetId: String) {

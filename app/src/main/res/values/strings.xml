@@ -31,6 +31,7 @@
     <string name="action_skip">Skip</string>
     <string name="action_stop">Stop</string>
     <string name="action_start">Start</string>
+    <string name="action_back">Back</string>
 
     <!-- Tile -->
     <string name="tile_ready_to_start">Ready to Start</string>
@@ -41,4 +42,8 @@
     <string name="add_preset">Add Preset</string>
     <string name="default_label">Default</string>
     <string name="set_default">Set Default</string>
+    <string name="preset_editor_title_new">New Preset</string>
+    <string name="preset_editor_title_edit">Editing %1$s</string>
+    <string name="preset_editor_placeholder_description">Preset editor is coming soon.
+Tap Back to return to the list.</string>
 </resources>

@@ -10,9 +10,10 @@
 - [x] Notification copy updated to `<Preset> • <Phase>`, richer progress text, and preset-aware `PendingIntent` in `TimerService`.
 - [x] Duration formatter extracted to `util/DurationFormatter.kt` and applied on preset list rows.
 - [x] Default timer reducer unit tests covering start, ticks, pause/resume, skip, stop, and zero-length segments (`app/src/test/.../DefaultTimerStateReducerTest.kt`).
+- [x] Preset list wired to navigation: Add/Edit buttons launch placeholder editor screen and return via Back (`TimerViewModel`, `WearApp`, `PresetEditorPlaceholder`).
 
 ## Not Done
 - [ ] Implement TileService with Dynamic Time progress, TileUpdateRequester callbacks, and tile actions per AGENTS.md (§11).
-- [ ] Implement preset editor navigation/actions (currently buttons in `PresetListScreen` are placeholders).
+- [ ] Build full preset editor UI/logic (form for title + 3 durations, validation, save/cancel) replacing placeholder screen.
 - [ ] Add instrumentation smoke tests on Wear AVD per §9 (unit tests exist, instrumentation missing).
 - [ ] Document and verify exact-alarm vs tick evaluation with reproducible measurements per §6 (§13); ensure findings are captured alongside the manifest decision.

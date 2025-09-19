@@ -2,6 +2,7 @@ package com.example.sermontimer.presentation
 
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
+import com.example.sermontimer.ui.PresetEditorPlaceholder
 import com.example.sermontimer.ui.PresetListScreen
 import com.example.sermontimer.ui.TimerScreen
 
@@ -11,6 +12,7 @@ fun WearApp(viewModel: TimerViewModel) {
     val timerState by viewModel.timerState.collectAsState()
     val presets by viewModel.presets.collectAsState()
     val defaultPresetId by viewModel.defaultPresetId.collectAsState()
+    val editorTarget by viewModel.editorTargetPreset.collectAsState()
 
     when (currentScreen) {
         TimerViewModel.Screen.PresetList -> {
@@ -20,12 +22,8 @@ fun WearApp(viewModel: TimerViewModel) {
                 onPresetSelected = { preset ->
                     viewModel.startTimer(preset)
                 },
-                onAddPreset = {
-                    // TODO: Navigate to preset editor
-                },
-                onEditPreset = { preset ->
-                    // TODO: Navigate to preset editor
-                },
+                onAddPreset = { viewModel.startAddPresetFlow() },
+                onEditPreset = { preset -> viewModel.startEditPresetFlow(preset) },
                 onSetDefault = { presetId ->
                     viewModel.setDefaultPreset(presetId)
                 }
@@ -55,14 +53,9 @@ fun WearApp(viewModel: TimerViewModel) {
         }
 
         TimerViewModel.Screen.PresetEditor -> {
-            // TODO: Implement preset editor screen
-            PresetListScreen(
-                presets = presets,
-                defaultPresetId = defaultPresetId,
-                onPresetSelected = { preset -> viewModel.startTimer(preset) },
-                onAddPreset = {},
-                onEditPreset = {},
-                onSetDefault = { viewModel.setDefaultPreset(it) }
+            PresetEditorPlaceholder(
+                preset = editorTarget,
+                onClose = { viewModel.closePresetEditor() }
             )
         }
     }
