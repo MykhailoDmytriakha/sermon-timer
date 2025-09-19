@@ -7,12 +7,14 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.wear.tiles.TileUpdateRequester
 import com.example.sermontimer.R
 import com.example.sermontimer.data.TimerDataProvider
 import com.example.sermontimer.domain.engine.*
 import com.example.sermontimer.domain.model.*
 import com.example.sermontimer.domain.time.MonotonicTimeProvider
 import com.example.sermontimer.presentation.MainActivity
+import com.example.sermontimer.tile.SermonTileService
 import com.example.sermontimer.util.HapticPatterns
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -26,6 +28,7 @@ class TimerService : Service() {
     private lateinit var dataRepository: com.example.sermontimer.data.TimerDataRepository
     private lateinit var serviceScope: CoroutineScope
     private lateinit var hapticPatterns: HapticPatterns
+    private lateinit var tileUpdateRequester: TileUpdateRequester
 
     private var timerJob: Job? = null
     private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
@@ -100,6 +103,11 @@ class TimerService : Service() {
         timeProvider = MonotonicTimeProvider { android.os.SystemClock.elapsedRealtime() }
         reducer = DefaultTimerStateReducer()
         hapticPatterns = HapticPatterns(this)
+        tileUpdateRequester = TileUpdateRequester { clazz ->
+            if (clazz == SermonTileService::class.java) {
+                // Tile update request
+            }
+        }
 
         // Try to recover state from DataStore
         serviceScope.launch {
@@ -181,7 +189,12 @@ class TimerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
-        stopForeground(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
     }
 
     private suspend fun startTimerWithPreset(presetId: String) {
@@ -202,8 +215,12 @@ class TimerService : Service() {
             engine.state.collect { state ->
                 updateNotification(state)
                 saveStateToDataStore(state)
-                // TODO: Re-enable tile updates when TileService is fixed
-                // tileUpdateRequester.requestUpdate()
+                try {
+                    tileUpdateRequester.requestUpdate(SermonTileService::class.java)
+                } catch (e: Exception) {
+                    // Tile update failed, but don't crash the service
+                    android.util.Log.w("TIMER", "Tile update failed", e)
+                }
 
                 // Start/stop timer job based on state
                 if (state.isActive && timerJob?.isActive != true) {
@@ -219,7 +236,12 @@ class TimerService : Service() {
                 // Stop service after we've seen an active session return to idle
                 if (state.status == RunStatus.IDLE && observedNonIdleState) {
                     observedNonIdleState = false
-                    stopForeground(true)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        stopForeground(true)
+                    }
                     stopSelf()
                 }
             }

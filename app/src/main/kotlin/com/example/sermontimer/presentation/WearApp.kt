@@ -2,7 +2,7 @@ package com.example.sermontimer.presentation
 
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
-import com.example.sermontimer.ui.PresetEditorPlaceholder
+import com.example.sermontimer.ui.PresetEditorScreen
 import com.example.sermontimer.ui.PresetListScreen
 import com.example.sermontimer.ui.TimerScreen
 
@@ -53,9 +53,23 @@ fun WearApp(viewModel: TimerViewModel) {
         }
 
         TimerViewModel.Screen.PresetEditor -> {
-            PresetEditorPlaceholder(
+            PresetEditorScreen(
                 preset = editorTarget,
-                onClose = { viewModel.closePresetEditor() }
+                onSave = { preset ->
+                    if (editorTarget == null) {
+                        // Adding new preset
+                        viewModel.addPreset(preset)
+                    } else {
+                        // Updating existing preset
+                        viewModel.updatePreset(preset)
+                    }
+                    viewModel.closePresetEditor()
+                },
+                onCancel = { viewModel.closePresetEditor() },
+                onDelete = { preset ->
+                    viewModel.deletePreset(preset.id)
+                    viewModel.closePresetEditor()
+                }
             )
         }
     }

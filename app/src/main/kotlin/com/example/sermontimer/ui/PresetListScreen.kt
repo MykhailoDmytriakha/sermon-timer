@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.wear.compose.material.Icon
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,13 +98,17 @@ fun PresetListItem(
                     Text(
                         text = preset.title,
                         style = MaterialTheme.typography.title3,
-                        color = MaterialTheme.colors.onSurface
+                        color = MaterialTheme.colors.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = preset.formatDuration(),
                         style = MaterialTheme.typography.caption1,
-                        color = MaterialTheme.colors.onSurfaceVariant
+                        color = MaterialTheme.colors.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -109,15 +116,38 @@ fun PresetListItem(
             Row(
                 modifier = Modifier
                     .fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Edit button - round icon button (following best practices)
+                Button(
+                    onClick = onEdit,
+                    modifier = Modifier.size(44.dp), // 44dp for optimal touch target per guidelines
+                    shape = RoundedCornerShape(22.dp), // Perfect circle for familiarity
+                    colors = ButtonDefaults.secondaryButtonColors()
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.action_edit)
+                    )
+                }
+
+                // Default/ Set Default button
                 if (isDefault) {
                     DefaultBadge()
                 } else {
                     CompactChip(
                         onClick = { onSetDefault(true) },
-                        label = { Text(stringResource(R.string.set_default)) }
+                        modifier = Modifier.weight(1f),
+                        label = {
+                            Text(
+                                text = stringResource(R.string.set_default),
+                                style = MaterialTheme.typography.caption2.copy(
+                                    fontSize = MaterialTheme.typography.caption2.fontSize * 0.9f
+                                ),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     )
                 }
             }
@@ -127,16 +157,22 @@ fun PresetListItem(
 
 @Composable
 private fun DefaultBadge() {
-    Text(
-        text = stringResource(R.string.default_label),
-        style = MaterialTheme.typography.caption2,
-        color = MaterialTheme.colors.primary,
-        modifier = Modifier
-            .background(
-                color = MaterialTheme.colors.primary.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(50)
+    CompactChip(
+        onClick = {}, // No action needed for display
+        enabled = false,
+        label = {
+            Text(
+                text = stringResource(R.string.default_label),
+                style = MaterialTheme.typography.caption2.copy(
+                    fontSize = MaterialTheme.typography.caption2.fontSize * 0.9f
+                ),
+                textAlign = TextAlign.Center
             )
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+        },
+        colors = ChipDefaults.chipColors(
+            backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
+            contentColor = MaterialTheme.colors.primary
+        )
     )
 }
 
