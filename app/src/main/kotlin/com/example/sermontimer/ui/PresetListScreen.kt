@@ -14,6 +14,7 @@ import androidx.wear.compose.material.*
 import com.example.sermontimer.R
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.SegmentDurations
+import com.example.sermontimer.util.DurationFormatter
 
 @Composable
 fun PresetListScreen(
@@ -120,7 +121,7 @@ fun PresetListItem(
 }
 
 private fun Preset.formatDuration(): String {
-    return "${introSec/60}:${mainSec/60}:${outroSec/60}"
+    return DurationFormatter.formatPresetDurations(introSec, mainSec, outroSec)
 }
 
 @Preview(device = "id:wear_os_large_round", showSystemUi = true)

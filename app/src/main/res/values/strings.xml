@@ -11,19 +11,30 @@
     <string name="segment_main">Main</string>
     <string name="segment_outro">Outro</string>
     <string name="segment_short">I/M/O</string>
+    <string name="segment_intro_short">I</string>
+    <string name="segment_main_short">M</string>
+    <string name="segment_outro_short">O</string>
 
     <!-- Timer states -->
     <string name="timer_done">Done</string>
     <string name="timer_completed">Completed</string>
+    <string name="timer_ready">Ready</string>
 
     <!-- Notification -->
     <string name="remaining_time">Remaining: %1$d:%2$02d</string>
+    <string name="remaining_time_with_progress">Remaining: %1$d:%2$02d (%3$d%% complete)</string>
+    <string name="timer_completed_with_total">Completed! Total: %1$d:%2$02d</string>
 
     <!-- Actions -->
     <string name="action_pause">Pause</string>
     <string name="action_resume">Resume</string>
     <string name="action_skip">Skip</string>
     <string name="action_stop">Stop</string>
+    <string name="action_start">Start</string>
+
+    <!-- Tile -->
+    <string name="tile_ready_to_start">Ready to Start</string>
+    <string name="tile_description">Quick timer controls</string>
 
     <!-- UI -->
     <string name="presets_title">Presets</string>

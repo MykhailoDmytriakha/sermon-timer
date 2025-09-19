@@ -54,6 +54,8 @@ dependencies {
     implementation(libs.compose.material)
     implementation(libs.compose.foundation)
     implementation(libs.wear.tooling.preview)
+    implementation(libs.wear.tiles)
+    implementation(libs.wear.tiles.proto)
     implementation(libs.activity.compose)
     implementation(libs.core.splashscreen)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -19,6 +19,7 @@ import com.example.sermontimer.domain.model.TimerState
 import com.example.sermontimer.domain.model.SegmentDurations
 import com.example.sermontimer.domain.model.ActivePresetMeta
 import com.example.sermontimer.service.TimerService
+import com.example.sermontimer.util.DurationFormatter
 
 @Composable
 fun TimerScreen(
@@ -58,10 +59,8 @@ fun TimerScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         // Large timer display
-        val minutes = timerState.remainingInSegmentSec / 60
-        val seconds = timerState.remainingInSegmentSec % 60
         Text(
-            text = String.format("%02d:%02d", minutes, seconds),
+            text = DurationFormatter.formatTimerDisplay(timerState.remainingInSegmentSec),
             style = MaterialTheme.typography.display1,
             color = Color.White,
             textAlign = TextAlign.Center
@@ -131,10 +130,21 @@ fun TimerScreen(
                     }
                 }
 
+                RunStatus.DONE -> {
+                    Button(
+                        onClick = onStop,
+                        colors = ButtonDefaults.buttonColors(backgroundColor = Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Text(
+                            text = stringResource(R.string.action_stop),
+                            color = Color.White
+                        )
+                    }
+                }
+
                 else -> {
-                    // Idle or done state - show start option if available
                     Text(
-                        text = stringResource(R.string.timer_done),
+                        text = stringResource(R.string.timer_ready),
                         style = MaterialTheme.typography.body1,
                         color = Color.White,
                         textAlign = TextAlign.Center

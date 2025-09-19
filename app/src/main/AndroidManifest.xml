@@ -1,7 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!--
+        WAKE_LOCK permission removed: Manual wakelocks are not needed since ForegroundService
+        provides sufficient priority. Tick-based timing with 1-second intervals provides
+        adequate accuracy (±1-2 seconds) for the sermon timer use case. Exact alarms would
+        add complexity without significant benefit for this accuracy requirement.
+        See AGENTS.md §6 and §13 for timing strategy evaluation.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <uses-feature android:name="android.hardware.type.watch" />
 
@@ -41,7 +50,9 @@
 
         <service
             android:name=".service.TimerService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
     </application>
 
 </manifest>

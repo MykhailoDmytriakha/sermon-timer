@@ -47,7 +47,7 @@ class DefaultTimerStateReducer : TimerStateReducer {
         }
         val totalSec = current.durations.totalSec
         val elapsedSinceStartSec = secondsBetween(current.startedAtElapsedRealtime, command.monotonicNowMs)
-        val newElapsed = min(totalSec, elapsedSinceStartSec)
+        val newElapsed = min(totalSec, current.elapsedTotalSec + elapsedSinceStartSec)
         if (newElapsed <= current.elapsedTotalSec) {
             return TimerStateReducer.ReductionResult(current)
         }
@@ -59,7 +59,8 @@ class DefaultTimerStateReducer : TimerStateReducer {
             return TimerStateReducer.ReductionResult(current)
         }
         val totalSec = current.durations.totalSec
-        val newElapsed = min(totalSec, secondsBetween(current.startedAtElapsedRealtime, command.monotonicNowMs))
+        val elapsedSinceStart = secondsBetween(current.startedAtElapsedRealtime, command.monotonicNowMs)
+        val newElapsed = min(totalSec, current.elapsedTotalSec + elapsedSinceStart)
         val (updatedState, events) = updateProgress(current, newElapsed)
         val pausedState = updatedState.copy(
             status = RunStatus.PAUSED,
@@ -215,6 +216,6 @@ class DefaultTimerStateReducer : TimerStateReducer {
     }
 
     private fun adjustBaseline(monotonicNowMs: Long, elapsedSec: Int): Long {
-        return monotonicNowMs - elapsedSec * 1000L
+        return monotonicNowMs - elapsedSec
     }
 }
