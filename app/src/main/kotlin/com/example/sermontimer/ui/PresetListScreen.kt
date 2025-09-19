@@ -1,8 +1,10 @@
 package com.example.sermontimer.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,8 +32,8 @@ fun PresetListScreen(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 Text(
@@ -60,6 +62,10 @@ fun PresetListScreen(
                     Text(text = stringResource(R.string.add_preset))
                 }
             }
+
+            item {
+                Spacer(modifier = Modifier.height(48.dp))
+            }
         }
     }
 }
@@ -72,52 +78,66 @@ fun PresetListItem(
     onEdit: () -> Unit,
     onSetDefault: (Boolean) -> Unit,
 ) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = preset.title,
-                    style = MaterialTheme.typography.title3
-                )
-
-                if (isDefault) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text(
-                        text = stringResource(R.string.default_label),
+                        text = preset.title,
+                        style = MaterialTheme.typography.title3,
+                        color = MaterialTheme.colors.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = preset.formatDuration(),
                         style = MaterialTheme.typography.caption1,
-                        color = MaterialTheme.colors.primary
+                        color = MaterialTheme.colors.onSurfaceVariant
                     )
                 }
             }
-
-            Text(
-                text = preset.formatDuration(),
-                style = MaterialTheme.typography.body2,
-                color = MaterialTheme.colors.onSurfaceVariant
-            )
-
-            if (!isDefault) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isDefault) {
+                    DefaultBadge()
+                } else {
                     CompactChip(
                         onClick = { onSetDefault(true) },
-                        label = { Text(stringResource(R.string.set_default)) },
-                        modifier = Modifier.padding(top = 8.dp)
+                        label = { Text(stringResource(R.string.set_default)) }
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun DefaultBadge() {
+    Text(
+        text = stringResource(R.string.default_label),
+        style = MaterialTheme.typography.caption2,
+        color = MaterialTheme.colors.primary,
+        modifier = Modifier
+            .background(
+                color = MaterialTheme.colors.primary.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(50)
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    )
 }
 
 private fun Preset.formatDuration(): String {

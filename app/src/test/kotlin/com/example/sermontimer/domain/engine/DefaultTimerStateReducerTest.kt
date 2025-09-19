@@ -15,11 +15,14 @@ class DefaultTimerStateReducerTest {
         outroSec = 300   // 5 minutes
     )
     private val testDurations = SegmentDurations(300, 1200, 300)
+    private val startMonotonicMs = 1_000_000L
+
+    private fun monotonicAt(elapsedSec: Int): Long = startMonotonicMs + elapsedSec * 1000L
 
     @Test
     fun `start from idle state transitions to running intro`() {
         val idleState = TimerState.idle(testDurations)
-        val command = TimerCommand.Start(testPreset, 1000L)
+        val command = TimerCommand.Start(testPreset, startMonotonicMs)
 
         val result = reducer.reduce(idleState, command)
 
@@ -27,7 +30,7 @@ class DefaultTimerStateReducerTest {
         assertThat(result.newState.segment).isEqualTo(Segment.INTRO)
         assertThat(result.newState.remainingInSegmentSec).isEqualTo(300)
         assertThat(result.newState.elapsedTotalSec).isEqualTo(0)
-        assertThat(result.newState.startedAtElapsedRealtime).isEqualTo(1000L)
+        assertThat(result.newState.startedAtElapsedRealtime).isEqualTo(startMonotonicMs)
         assertThat(result.newState.activePreset?.id).isEqualTo("test-preset")
         assertThat(result.events).isEmpty() // No boundary events on start
     }
@@ -40,10 +43,10 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 250,
             elapsedTotalSec = 50,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
-        val command = TimerCommand.Start(testPreset, 2000L)
+        val command = TimerCommand.Start(testPreset, monotonicAt(60))
 
         val result = reducer.reduce(runningState, command)
 
@@ -59,10 +62,10 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 250,
             elapsedTotalSec = 50,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
-        val command = TimerCommand.Tick(2000L) // 1000ms elapsed
+        val command = TimerCommand.Tick(monotonicAt(51)) // 1s after previous snapshot
 
         val result = reducer.reduce(runningState, command)
 
@@ -79,10 +82,10 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 1,
             elapsedTotalSec = 299,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
-        val command = TimerCommand.Tick(2000L) // 1000ms elapsed, crosses boundary
+        val command = TimerCommand.Tick(monotonicAt(300)) // Tick at intro boundary
 
         val result = reducer.reduce(runningState, command)
 
@@ -104,10 +107,10 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 1,
             elapsedTotalSec = 1799,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
-        val command = TimerCommand.Tick(2000L) // 1000ms elapsed, completes timer
+        val command = TimerCommand.Tick(monotonicAt(1800)) // Completes timer
 
         val result = reducer.reduce(runningState, command)
 
@@ -128,10 +131,10 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 1000,
             elapsedTotalSec = 350,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
-        val command = TimerCommand.Pause(1500L) // 500ms elapsed
+        val command = TimerCommand.Pause(monotonicAt(350))
 
         val result = reducer.reduce(runningState, command)
 
@@ -153,12 +156,12 @@ class DefaultTimerStateReducerTest {
             startedAtElapsedRealtime = null,
             activePreset = testPreset.toActivePresetMeta()
         )
-        val command = TimerCommand.Resume(2000L)
+        val command = TimerCommand.Resume(monotonicAt(400))
 
         val result = reducer.reduce(pausedState, command)
 
         assertThat(result.newState.status).isEqualTo(RunStatus.RUNNING)
-        assertThat(result.newState.startedAtElapsedRealtime).isEqualTo(1650L) // 2000 - 350
+        assertThat(result.newState.startedAtElapsedRealtime).isEqualTo(monotonicAt(50))
         assertThat(result.events).hasSize(1)
         assertThat(result.events[0]).isInstanceOf(TimerEvent.Resumed::class.java)
     }
@@ -171,10 +174,10 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 200,
             elapsedTotalSec = 100,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
-        val command = TimerCommand.SkipSegment(1500L)
+        val command = TimerCommand.SkipSegment(monotonicAt(300))
 
         val result = reducer.reduce(runningState, command)
 
@@ -192,10 +195,10 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 200,
             elapsedTotalSec = 100,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = presetWithoutSkip.toActivePresetMeta()
         )
-        val command = TimerCommand.SkipSegment(1500L)
+        val command = TimerCommand.SkipSegment(monotonicAt(200))
 
         val result = reducer.reduce(runningState, command)
 
@@ -212,7 +215,7 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 1000,
             elapsedTotalSec = 350,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
         val command = TimerCommand.Stop
@@ -233,7 +236,7 @@ class DefaultTimerStateReducerTest {
     fun `zero duration segments are automatically skipped on start`() {
         val presetWithZeroIntro = testPreset.copy(introSec = 0)
         val idleState = TimerState.idle(SegmentDurations(0, 1200, 300))
-        val command = TimerCommand.Start(presetWithZeroIntro, 1000L)
+        val command = TimerCommand.Start(presetWithZeroIntro, startMonotonicMs)
 
         val result = reducer.reduce(idleState, command)
 
@@ -251,16 +254,16 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 50,
             elapsedTotalSec = 250,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
-        val command = TimerCommand.SegmentBoundary(Segment.INTRO, 1500L)
+        val command = TimerCommand.SegmentBoundary(Segment.INTRO, monotonicAt(300))
 
         val result = reducer.reduce(runningState, command)
 
         assertThat(result.newState.elapsedTotalSec).isEqualTo(300) // Boundary of intro
         assertThat(result.newState.segment).isEqualTo(Segment.MAIN)
-        assertThat(result.newState.startedAtElapsedRealtime).isEqualTo(1200L) // Adjusted baseline
+        assertThat(result.newState.startedAtElapsedRealtime).isEqualTo(monotonicAt(0))
     }
 
     @Test
@@ -271,7 +274,7 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 250,
             elapsedTotalSec = 50,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
         val command = TimerCommand.Cancel
@@ -290,10 +293,10 @@ class DefaultTimerStateReducerTest {
             remainingInSegmentSec = 250,
             elapsedTotalSec = 50,
             durations = testDurations,
-            startedAtElapsedRealtime = 1000L,
+            startedAtElapsedRealtime = startMonotonicMs,
             activePreset = testPreset.toActivePresetMeta()
         )
-        val command = TimerCommand.Tick(1000L) // Same time as start
+        val command = TimerCommand.Tick(startMonotonicMs) // Same time as start
 
         val result = reducer.reduce(runningState, command)
 
