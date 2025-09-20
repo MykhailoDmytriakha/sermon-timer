@@ -14,12 +14,10 @@ import androidx.wear.protolayout.expression.AnimationParameterBuilders
 import androidx.wear.protolayout.expression.DynamicBuilders
 import androidx.wear.protolayout.material.ChipColors
 import androidx.wear.protolayout.material.ChipDefaults
-import androidx.wear.protolayout.material.CircularProgressIndicator
 import androidx.wear.protolayout.material.Colors
-import androidx.wear.protolayout.material.CompactChip
+import androidx.wear.protolayout.material.TitleChip
 import androidx.wear.protolayout.material.Text
 import androidx.wear.protolayout.material.Typography
-import androidx.wear.protolayout.material.layouts.PrimaryLayout
 import androidx.wear.tiles.RequestBuilders
 import androidx.wear.tiles.TileBuilders
 import androidx.wear.tiles.TileService
@@ -28,7 +26,6 @@ import com.example.sermontimer.data.TimerDataProvider
 import com.example.sermontimer.data.TimerDataRepository
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.RunStatus
-import com.example.sermontimer.domain.model.Segment
 import com.example.sermontimer.domain.model.TimerState
 import com.example.sermontimer.util.DurationFormatter
 import com.google.common.util.concurrent.Futures
@@ -91,62 +88,37 @@ class SermonTileService : TileService() {
     private fun createLayout(
         deviceParameters: DeviceParametersBuilders.DeviceParameters,
         snapshot: TileSnapshot,
-    ): PrimaryLayout {
-        val progressPropBuilder = TypeBuilders.FloatProp.Builder(snapshot.progressFraction.coerceIn(0f, 1f))
-        val dynamicProgress = snapshot.dynamicProgress
-        if (dynamicProgress != null) {
-            progressPropBuilder.setDynamicValue(dynamicProgress)
-        }
-
-        val progressIndicator = CircularProgressIndicator.Builder()
-            .setProgress(progressPropBuilder.build())
-            .setContentDescription(snapshot.progressContentDescription)
-            .setOuterMarginApplied(true)
-            .build()
-
-        val centerText = Text.Builder(this, snapshot.centerText)
-            .setTypography(Typography.TYPOGRAPHY_DISPLAY1)
-            .setColor(ColorBuilders.argb(snapshot.centerTextColor))
-            .build()
-
-        val progressContainer = LayoutElementBuilders.Box.Builder()
-            .setWidth(DimensionBuilders.expand())
-            .setHeight(DimensionBuilders.expand())
-            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-            .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
-            .addContent(progressIndicator)
-            .addContent(centerText)
-            .build()
-
+    ): LayoutElementBuilders.LayoutElement {
         val primaryLabel = Text.Builder(this, snapshot.primaryLabel)
             .setTypography(Typography.TYPOGRAPHY_TITLE1)
             .setColor(ColorBuilders.argb(snapshot.primaryLabelColor))
             .build()
 
-        val secondaryLabel = snapshot.secondaryLabel?.let {
-            Text.Builder(this, it)
-                .setTypography(Typography.TYPOGRAPHY_BODY1)
-                .setColor(ColorBuilders.argb(snapshot.secondaryLabelColor))
-                .build()
-        }
-
         val clickable = createActionClickable(snapshot.buttonAction, snapshot.targetPresetId)
 
-        val chip = CompactChip.Builder(this, snapshot.buttonText, clickable, deviceParameters)
-            .setChipColors(snapshot.compactChipColors)
+        val chip = TitleChip.Builder(this, snapshot.buttonText, clickable, deviceParameters)
+            .setChipColors(snapshot.primaryChipColors)
             .setContentDescription(snapshot.buttonContentDescription)
             .build()
 
-        return PrimaryLayout.Builder(deviceParameters)
-            .setResponsiveContentInsetEnabled(true)
-            .setPrimaryLabelTextContent(primaryLabel)
-            .setContent(progressContainer)
-            .setPrimaryChipContent(chip)
-            .apply {
-                if (secondaryLabel != null) {
-                    setSecondaryLabelTextContent(secondaryLabel)
-                }
-            }
+        // Create a centered layout with the app label and button
+        return LayoutElementBuilders.Box.Builder()
+            .setWidth(DimensionBuilders.expand())
+            .setHeight(DimensionBuilders.expand())
+            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
+            .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
+            .addContent(
+                LayoutElementBuilders.Column.Builder()
+                    .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
+                    .addContent(primaryLabel)
+                    .addContent(
+                        LayoutElementBuilders.Spacer.Builder()
+                            .setHeight(DimensionBuilders.dp(16f))
+                            .build()
+                    )
+                    .addContent(chip)
+                    .build()
+            )
             .build()
     }
 
@@ -180,144 +152,39 @@ class SermonTileService : TileService() {
         presets: List<Preset>,
         defaultPresetId: String?,
     ): TileSnapshot {
-        val fallbackPreset = presets.find { it.id == defaultPresetId } ?: presets.firstOrNull()
-        if (timerState == null || timerState.status == RunStatus.IDLE) {
-            val targetPreset = fallbackPreset
-            val presetTitle = targetPreset?.title ?: getString(R.string.tile_ready_to_start)
-            val durationLabel = targetPreset?.let {
-                DurationFormatter.formatPresetDurations(it.introSec, it.mainSec, it.outroSec)
-            }
-            val totalSeconds = targetPreset?.let { it.introSec + it.mainSec + it.outroSec } ?: 0
-            return TileSnapshot(
-                status = RunStatus.IDLE,
-                primaryLabel = presetTitle,
-                secondaryLabel = durationLabel,
-                centerText = if (totalSeconds > 0) DurationFormatter.formatDurationCompact(totalSeconds) else "--:--",
-                buttonText = getString(R.string.action_start),
-                buttonContentDescription = getString(R.string.tile_ready_to_start),
-                buttonAction = TileButtonAction.START,
-                targetPresetId = targetPreset?.id,
-                progressFraction = 0f,
-                dynamicProgress = null,
-                progressContentDescription = getString(R.string.tile_ready_to_start),
-                centerTextColor = snapshotColors.center,
-                primaryLabelColor = snapshotColors.primary,
-                secondaryLabelColor = snapshotColors.secondary,
-                compactChipColors = snapshotColors.primaryChip,
-                freshnessIntervalMillis = 0L
-            )
-        }
-
-        val activePresetId = timerState.activePreset?.id
-        val activePreset = presets.find { it.id == activePresetId } ?: fallbackPreset
-        val totalSeconds = timerState.totalSec.takeIf { it > 0 } ?: activePreset?.let { it.introSec + it.mainSec + it.outroSec } ?: 0
-        val elapsedSeconds = min(timerState.elapsedTotalSec, totalSeconds)
-        val remainingSeconds = max(0, totalSeconds - elapsedSeconds)
-        val fraction = if (totalSeconds > 0) elapsedSeconds.toFloat() / totalSeconds else 0f
-        val phaseLabel = phaseLabel(timerState.segment)
-        val remainingFormatted = DurationFormatter.formatTimerDisplay(timerState.remainingInSegmentSec)
-        val totalFormatted = if (totalSeconds > 0) DurationFormatter.formatDurationCompact(totalSeconds) else "--:--"
-        val presetTitle = activePreset?.title ?: getString(R.string.app_name)
-
-        val (buttonText, buttonAction) = when (timerState.status) {
-            RunStatus.RUNNING -> getString(R.string.action_view_progress) to TileButtonAction.VIEW_PROGRESS
-            RunStatus.PAUSED -> getString(R.string.action_view_progress) to TileButtonAction.VIEW_PROGRESS
-            RunStatus.DONE -> getString(R.string.action_start) to TileButtonAction.START
-            else -> getString(R.string.action_start) to TileButtonAction.START
-        }
-
-        val primaryLabel = when (timerState.status) {
-            RunStatus.RUNNING -> getString(R.string.tile_timer_running)
-            RunStatus.PAUSED -> getString(R.string.tile_timer_paused)
-            RunStatus.DONE -> getString(R.string.tile_label_done, presetTitle)
-            else -> presetTitle
-        }
-
-        val secondaryLabel = when (timerState.status) {
-            RunStatus.RUNNING, RunStatus.PAUSED -> getString(R.string.tile_tap_to_view)
-            RunStatus.DONE -> getString(R.string.tile_label_done_total, totalFormatted)
-            else -> presetTitle
-        }
-
-        val dynamicProgress = null // No progress animation for tile shortcut mode
-
-        val progressDescription = when (timerState.status) {
-            RunStatus.RUNNING, RunStatus.PAUSED -> getString(R.string.tile_timer_active)
-            RunStatus.DONE -> getString(R.string.tile_progress_done, totalFormatted)
-            else -> getString(R.string.tile_ready_to_start)
-        }
-
-        val centerText = when (timerState.status) {
-            RunStatus.RUNNING, RunStatus.PAUSED -> "--:--"
-            RunStatus.DONE -> totalFormatted
-            else -> remainingFormatted
-        }
-
-        val targetPresetId = when (timerState.status) {
-            RunStatus.RUNNING, RunStatus.PAUSED, RunStatus.DONE -> activePreset?.id
-            else -> fallbackPreset?.id
-        }
-
-        val chipColors = when (timerState.status) {
-            RunStatus.PAUSED -> snapshotColors.secondaryChip
-            RunStatus.RUNNING -> snapshotColors.primaryChip
-            RunStatus.DONE -> snapshotColors.primaryChip
-            else -> snapshotColors.primaryChip
-        }
+        // Always show simple app shortcut regardless of timer state
+        val appLabel = getString(R.string.tile_app_label)
 
         return TileSnapshot(
-            status = timerState.status,
-            primaryLabel = primaryLabel,
-            secondaryLabel = secondaryLabel,
-            centerText = centerText,
-            buttonText = buttonText,
-            buttonContentDescription = progressDescription,
-            buttonAction = buttonAction,
-            targetPresetId = targetPresetId,
-            progressFraction = if (timerState.status == RunStatus.RUNNING || timerState.status == RunStatus.PAUSED) 0f else fraction.coerceIn(0f, 1f),
-            dynamicProgress = dynamicProgress,
-            progressContentDescription = progressDescription,
-            centerTextColor = snapshotColors.center,
+            primaryLabel = appLabel,
+            buttonText = getString(R.string.tile_open_app),
+            buttonContentDescription = getString(R.string.tile_description),
+            buttonAction = TileButtonAction.OPEN_APP,
+            targetPresetId = null,
             primaryLabelColor = snapshotColors.primary,
-            secondaryLabelColor = snapshotColors.secondary,
-            compactChipColors = chipColors,
-            freshnessIntervalMillis = if (timerState.status == RunStatus.RUNNING) 0L else 30_000L
+            primaryChipColors = snapshotColors.primaryChip,
+            freshnessIntervalMillis = 0L
         )
     }
 
-    private fun phaseLabel(segment: Segment): String = when (segment) {
-        Segment.INTRO -> getString(R.string.segment_intro)
-        Segment.MAIN -> getString(R.string.segment_main)
-        Segment.OUTRO -> getString(R.string.segment_outro)
-        Segment.DONE -> getString(R.string.timer_done)
-    }
 
     private fun logSnapshot(snapshot: TileSnapshot) {
-        val progress = String.format(Locale.US, "%.2f", snapshot.progressFraction)
         Log.i(
             TILE_LOG_TAG,
-            "Tile snapshot → status=${snapshot.status}, button='${snapshot.buttonText}', primary='${snapshot.primaryLabel}', secondary='${snapshot.secondaryLabel ?: ""}', targetPreset=${snapshot.targetPresetId ?: "none"}, progressFraction=$progress"
+            "Tile snapshot → button='${snapshot.buttonText}', primary='${snapshot.primaryLabel}'"
         )
     }
 
     private val snapshotColors = TileColors()
 
     private data class TileSnapshot(
-        val status: RunStatus,
         val primaryLabel: String,
-        val secondaryLabel: String?,
-        val centerText: String,
         val buttonText: String,
         val buttonContentDescription: String,
         val buttonAction: TileButtonAction,
         val targetPresetId: String?,
-        val progressFraction: Float,
-        val dynamicProgress: DynamicBuilders.DynamicFloat?,
-        val progressContentDescription: String,
-        val centerTextColor: Int,
         val primaryLabelColor: Int,
-        val secondaryLabelColor: Int,
-        val compactChipColors: ChipColors,
+        val primaryChipColors: ChipColors,
         val freshnessIntervalMillis: Long,
     )
 
@@ -326,14 +193,12 @@ class SermonTileService : TileService() {
         VIEW_PROGRESS(TileActionActivity.ACTION_VIEW_PROGRESS),
         PAUSE(TileActionActivity.ACTION_PAUSE),
         RESUME(TileActionActivity.ACTION_RESUME),
+        OPEN_APP(TileActionActivity.ACTION_OPEN_APP),
     }
 
     private class TileColors {
         private val colors = Colors.DEFAULT
         val primary: Int = colors.onSurface
-        val secondary: Int = colors.onSurface
-        val center: Int = colors.onPrimary
-        val primaryChip: ChipColors = ChipDefaults.COMPACT_PRIMARY_COLORS
-        val secondaryChip: ChipColors = ChipDefaults.COMPACT_SECONDARY_COLORS
+        val primaryChip: ChipColors = ChipDefaults.PRIMARY_COLORS
     }
 }

@@ -47,6 +47,7 @@ class TileActionActivity : Activity() {
                 TimerService.resumeService(applicationContext)
                 openMainActivity()
             }
+            ACTION_OPEN_APP -> openMainActivity()
             else -> Unit
         }
         TileService.getUpdater(applicationContext).requestUpdate(SermonTileService::class.java)
@@ -83,5 +84,6 @@ class TileActionActivity : Activity() {
         const val ACTION_VIEW_PROGRESS = "view_progress"
         const val ACTION_PAUSE = "pause"
         const val ACTION_RESUME = "resume"
+        const val ACTION_OPEN_APP = "open_app"
     }
 }

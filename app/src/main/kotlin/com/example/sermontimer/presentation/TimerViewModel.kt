@@ -43,7 +43,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             // Load presets
             dataRepository.presets.collect { presets ->
-                _presets.value = presets
+                updatePresetsSorted(presets, _defaultPresetId.value)
             }
         }
 
@@ -51,8 +51,21 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             // Load default preset
             dataRepository.defaultPresetId.collect { defaultId ->
                 _defaultPresetId.value = defaultId
+                updatePresetsSorted(_presets.value, defaultId)
             }
         }
+    }
+
+    /**
+     * Updates the presets list with proper sorting: default preset first, then others by title.
+     */
+    private fun updatePresetsSorted(presets: List<Preset>, defaultPresetId: String?) {
+        val sortedPresets = presets.sortedWith(compareBy<Preset> { preset ->
+            // Default preset comes first (false < true)
+            preset.id != defaultPresetId
+        }.thenBy { it.title })
+
+        _presets.value = sortedPresets
     }
 
     private fun observeTimerState() {

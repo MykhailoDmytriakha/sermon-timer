@@ -37,6 +37,8 @@
     <!-- Tile -->
     <string name="tile_ready_to_start">Ready to Start</string>
     <string name="tile_description">Quick timer controls</string>
+    <string name="tile_open_app">Open App</string>
+    <string name="tile_app_label">Timer</string>
     <string name="tile_label_running">%1$s • %2$s</string>
     <string name="tile_label_paused">Paused • %1$s • %2$s</string>
     <string name="tile_label_done">%1$s completed</string>
@@ -75,4 +77,9 @@ Tap Back to return to the list.</string>
     <string name="delete_preset_message">Are you sure you want to delete "%1$s"? This action cannot be undone.</string>
     <string name="delete_preset_confirm">Delete</string>
     <string name="delete_preset_cancel">Cancel</string>
+
+    <string name="set_default_preset_title">Set Default Preset</string>
+    <string name="set_default_preset_message">Set "%1$s" as the default preset? It will appear at the top of the list.</string>
+    <string name="set_default_preset_confirm">Set Default</string>
+    <string name="set_default_preset_cancel">Cancel</string>
 </resources>

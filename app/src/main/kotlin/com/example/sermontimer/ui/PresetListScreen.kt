@@ -30,9 +30,79 @@ fun PresetListScreen(
     onEditPreset: (Preset) -> Unit,
     onSetDefault: (String?) -> Unit,
 ) {
-    Scaffold(
-        timeText = { TimeText() }
-    ) {
+    // Set default confirmation state
+    var showSetDefaultConfirmation by remember { mutableStateOf<Preset?>(null) }
+
+    // Show either the main screen or set default confirmation
+    if (showSetDefaultConfirmation != null) {
+        // Set default confirmation dialog
+        Scaffold(
+            timeText = { TimeText() }
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    Text(
+                        text = stringResource(R.string.set_default_preset_title),
+                        style = MaterialTheme.typography.title3,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    Text(
+                        text = stringResource(R.string.set_default_preset_message, showSetDefaultConfirmation?.title ?: ""),
+                        style = MaterialTheme.typography.body2,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { showSetDefaultConfirmation = null },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.secondaryButtonColors()
+                        ) {
+                            Text(
+                                text = stringResource(R.string.set_default_preset_cancel),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                showSetDefaultConfirmation?.let { preset ->
+                                    onSetDefault(preset.id)
+                                }
+                                showSetDefaultConfirmation = null
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.set_default_preset_confirm),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // Main preset list screen
+        Scaffold(
+            timeText = { TimeText() }
+        ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
@@ -53,7 +123,8 @@ fun PresetListScreen(
                     isDefault = preset.id == defaultPresetId,
                     onClick = { onPresetSelected(preset) },
                     onEdit = { onEditPreset(preset) },
-                    onSetDefault = { onSetDefault(if (it) preset.id else null) }
+                    onSetDefault = { onSetDefault(if (it) preset.id else null) },
+                    onShowSetDefaultDialog = { showSetDefaultConfirmation = it }
                 )
             }
 
@@ -70,6 +141,7 @@ fun PresetListScreen(
                 Spacer(modifier = Modifier.height(48.dp))
             }
         }
+        }
     }
 }
 
@@ -80,6 +152,7 @@ fun PresetListItem(
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onSetDefault: (Boolean) -> Unit,
+    onShowSetDefaultDialog: (Preset) -> Unit,
 ) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -137,7 +210,7 @@ fun PresetListItem(
                     DefaultBadge()
                 } else {
                     CompactChip(
-                        onClick = { onSetDefault(true) },
+                        onClick = { onShowSetDefaultDialog(preset) },
                         modifier = Modifier.weight(1f),
                         label = {
                             Text(
@@ -183,18 +256,84 @@ private fun Preset.formatDuration(): String {
 @Preview(device = "id:wear_os_large_round", showSystemUi = true)
 @Composable
 fun PresetListScreenPreview() {
+    // Mock presets in unsorted order to demonstrate sorting
     val mockPresets = listOf(
-        Preset("1", "Sermon 5-20-5", 300, 1200, 300),
-        Preset("2", "Meeting 3-15-3", 180, 900, 180),
-        Preset("3", "Quick 2-10-2", 120, 600, 120)
+        Preset("2", "Meeting 3-15-3", 180, 900, 180), // Would be second alphabetically
+        Preset("1", "Sermon 5-20-5", 300, 1200, 300),  // Default preset - should be first
+        Preset("3", "Quick 2-10-2", 120, 600, 120)     // Would be first alphabetically
     )
 
     PresetListScreen(
         presets = mockPresets,
-        defaultPresetId = "1",
+        defaultPresetId = "1", // Preset "1" should appear first despite alphabetical order
         onPresetSelected = {},
         onAddPreset = {},
         onEditPreset = {},
         onSetDefault = {}
     )
+}
+
+@Preview(device = "id:wear_os_large_round", showSystemUi = true)
+@Composable
+fun SetDefaultPresetDialogPreview() {
+    // Preview of the set default confirmation dialog
+    val mockPreset = Preset("1", "Sermon 5-20-5", 300, 1200, 300)
+
+    Scaffold(
+        timeText = { TimeText() }
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                Text(
+                    text = "Set Default Preset", // Using hardcoded string for preview
+                    style = MaterialTheme.typography.title3,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            item {
+                Text(
+                    text = "Set \"${mockPreset.title}\" as the default preset? It will appear at the top of the list.", // Using hardcoded string for preview
+                    style = MaterialTheme.typography.body2,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {},
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.secondaryButtonColors()
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Button(
+                        onClick = {},
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "Set Default",
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
