@@ -36,6 +36,12 @@
     <!-- Tile -->
     <string name="tile_ready_to_start">Ready to Start</string>
     <string name="tile_description">Quick timer controls</string>
+    <string name="tile_label_running">%1$s • %2$s</string>
+    <string name="tile_label_paused">Paused • %1$s • %2$s</string>
+    <string name="tile_label_done">%1$s completed</string>
+    <string name="tile_label_done_total">Total %1$s</string>
+    <string name="tile_progress_description">%1$s segment, %2$s remaining</string>
+    <string name="tile_progress_done">Completed in %1$s</string>
 
     <!-- UI -->
     <string name="presets_title">Presets</string>

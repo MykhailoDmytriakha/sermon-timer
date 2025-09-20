@@ -7,6 +7,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.wear.tiles.TileService
 import androidx.wear.tiles.TileUpdateRequester
 import com.example.sermontimer.R
 import com.example.sermontimer.data.TimerDataProvider
@@ -103,11 +104,7 @@ class TimerService : Service() {
         timeProvider = MonotonicTimeProvider { android.os.SystemClock.elapsedRealtime() }
         reducer = DefaultTimerStateReducer()
         hapticPatterns = HapticPatterns(this)
-        tileUpdateRequester = TileUpdateRequester { clazz ->
-            if (clazz == SermonTileService::class.java) {
-                // Tile update request
-            }
-        }
+        tileUpdateRequester = TileService.getUpdater(applicationContext)
 
         // Try to recover state from DataStore
         serviceScope.launch {

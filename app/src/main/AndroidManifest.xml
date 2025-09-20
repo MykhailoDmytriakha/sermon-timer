@@ -2,11 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-        WAKE_LOCK permission removed: Manual wakelocks are not needed since ForegroundService
-        provides sufficient priority. Tick-based timing with 1-second intervals provides
-        adequate accuracy (±1-2 seconds) for the sermon timer use case. Exact alarms would
-        add complexity without significant benefit for this accuracy requirement.
-        See AGENTS.md §6 and §13 for timing strategy evaluation.
+        TIMING STRATEGY DECISION (September 19, 2025):
+        Using tick-based timing with 1-second intervals and elapsedRealtime() correction.
+        Provides adequate accuracy (±2.8s max deviation) for sermon timer use case.
+        Exact alarms rejected due to complexity, permissions, and minimal accuracy benefit.
+        See TIMING_STRATEGY_EVALUATION.md for detailed analysis.
+        Foreground service provides sufficient priority without manual wakelocks.
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -47,6 +48,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".tile.TileActionActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:finishOnTaskLaunch="false"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service
             android:name=".service.TimerService"

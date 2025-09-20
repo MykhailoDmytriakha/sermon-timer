@@ -10,10 +10,11 @@
 - [x] Notification copy updated to `<Preset> • <Phase>`, richer progress text, and preset-aware `PendingIntent` in `TimerService`.
 - [x] Duration formatter extracted to `util/DurationFormatter.kt` and applied on preset list rows.
 - [x] Default timer reducer unit tests covering start, ticks, pause/resume, skip, stop, and zero-length segments (`app/src/test/.../DefaultTimerStateReducerTest.kt`).
-- [x] Preset list wired to navigation: Add/Edit buttons launch placeholder editor screen and return via Back (`TimerViewModel`, `WearApp`, `PresetEditorPlaceholder`).
+- [x] Preset list wired to navigation: Add/Edit buttons launch the editor flow and return via Back (`TimerViewModel`, `WearApp`, `PresetEditorScreen`).
+- [x] TileService upgraded with Dynamic Time progress ring, contextual actions, and TileUpdateRequester integration (`app/src/main/kotlin/com/example/sermontimer/tile/SermonTileService.kt`, `TileActionActivity.kt`).
+- [x] Preset editor rebuilt with wearable TextField input, validation, and delete flow parity (`app/src/main/kotlin/com/example/sermontimer/ui/PresetEditorScreen.kt`).
+- [x] Instrumentation smoke tests added for service + UI (`app/src/androidTest/...`).
+- [x] Timing strategy evaluation documented and referenced from manifest (`TIMING_STRATEGY_EVALUATION.md`, `AndroidManifest.xml`).
 
 ## Not Done
-- [ ] Implement TileService with Dynamic Time progress, TileUpdateRequester callbacks, and tile actions per AGENTS.md (§11).
-- [ ] Build full preset editor UI/logic (form for title + 3 durations, validation, save/cancel) replacing placeholder screen.
-- [ ] Add instrumentation smoke tests on Wear AVD per §9 (unit tests exist, instrumentation missing).
-- [ ] Document and verify exact-alarm vs tick evaluation with reproducible measurements per §6 (§13); ensure findings are captured alongside the manifest decision.
+- [ ] Pending

@@ -61,6 +61,22 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             // this would observe the service state via a bound connection
             dataRepository.lastTimerState.collect { state ->
                 _timerState.value = state
+
+                when (state?.status) {
+                    RunStatus.RUNNING, RunStatus.PAUSED, RunStatus.DONE -> {
+                        if (_currentScreen.value != Screen.PresetEditor) {
+                            _currentScreen.value = Screen.Timer
+                        }
+                    }
+
+                    RunStatus.IDLE -> {
+                        if (_currentScreen.value == Screen.Timer) {
+                            _currentScreen.value = Screen.PresetList
+                        }
+                    }
+
+                    null -> Unit
+                }
             }
         }
     }
