@@ -1,6 +1,8 @@
 package com.example.sermontimer.data
 
 import android.content.Context
+import com.example.sermontimer.tile.TileUpdateDispatcher
+import com.example.sermontimer.tile.WearTileUpdateDispatcher
 
 /**
  * Provides timer data repository instance.
@@ -10,8 +12,11 @@ object TimerDataProvider {
     private lateinit var repository: TimerDataRepository
     private lateinit var initializer: PresetInitializer
 
-    fun initialize(context: Context) {
-        repository = DataStoreTimerRepository(context)
+    fun initialize(
+        context: Context,
+        tileUpdateDispatcher: TileUpdateDispatcher = WearTileUpdateDispatcher(context)
+    ) {
+        repository = DataStoreTimerRepository(context, tileUpdateDispatcher)
         initializer = PresetInitializer(repository)
     }
 

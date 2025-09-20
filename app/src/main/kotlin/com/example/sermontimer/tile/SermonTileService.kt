@@ -1,5 +1,6 @@
 package com.example.sermontimer.tile
 
+import android.util.Log
 import androidx.wear.protolayout.ActionBuilders
 import androidx.wear.protolayout.ColorBuilders
 import androidx.wear.protolayout.DeviceParametersBuilders
@@ -34,11 +35,13 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 
 private const val RESOURCES_VERSION = "2"
 private const val TILE_CLICK_ID = "tile-primary"
+private const val TILE_LOG_TAG = "TILE"
 
 /**
  * Wear OS Tile service that surfaces the Sermon Timer state with Dynamic Time progress and
@@ -67,6 +70,7 @@ class SermonTileService : TileService() {
     private fun buildTile(request: RequestBuilders.TileRequest): TileBuilders.Tile {
         val deviceParameters = request.deviceConfiguration
         val snapshot = runBlocking { loadSnapshot() }
+        logSnapshot(snapshot)
         val layout = createLayout(deviceParameters, snapshot)
         val timeline = TimelineBuilders.Timeline.fromLayoutElement(layout)
 
@@ -216,52 +220,35 @@ class SermonTileService : TileService() {
         val presetTitle = activePreset?.title ?: getString(R.string.app_name)
 
         val (buttonText, buttonAction) = when (timerState.status) {
-            RunStatus.RUNNING -> getString(R.string.action_pause) to TileButtonAction.PAUSE
-            RunStatus.PAUSED -> getString(R.string.action_resume) to TileButtonAction.RESUME
+            RunStatus.RUNNING -> getString(R.string.action_view_progress) to TileButtonAction.VIEW_PROGRESS
+            RunStatus.PAUSED -> getString(R.string.action_view_progress) to TileButtonAction.VIEW_PROGRESS
             RunStatus.DONE -> getString(R.string.action_start) to TileButtonAction.START
             else -> getString(R.string.action_start) to TileButtonAction.START
         }
 
         val primaryLabel = when (timerState.status) {
-            RunStatus.RUNNING -> getString(R.string.tile_label_running, phaseLabel, remainingFormatted)
-            RunStatus.PAUSED -> getString(R.string.tile_label_paused, phaseLabel, remainingFormatted)
+            RunStatus.RUNNING -> getString(R.string.tile_timer_running)
+            RunStatus.PAUSED -> getString(R.string.tile_timer_paused)
             RunStatus.DONE -> getString(R.string.tile_label_done, presetTitle)
             else -> presetTitle
         }
 
         val secondaryLabel = when (timerState.status) {
-            RunStatus.RUNNING, RunStatus.PAUSED -> presetTitle
+            RunStatus.RUNNING, RunStatus.PAUSED -> getString(R.string.tile_tap_to_view)
             RunStatus.DONE -> getString(R.string.tile_label_done_total, totalFormatted)
             else -> presetTitle
         }
 
-        val dynamicProgress = if (timerState.status == RunStatus.RUNNING && remainingSeconds > 0) {
-            DynamicBuilders.DynamicFloat.animate(
-                fraction,
-                1f,
-                AnimationParameterBuilders.AnimationSpec.Builder()
-                    .setAnimationParameters(
-                        AnimationParameterBuilders.AnimationParameters.Builder()
-                            .setDurationMillis(remainingSeconds * 1000L)
-                            .build()
-                    )
-                    .build()
-            )
-        } else {
-            null
-        }
+        val dynamicProgress = null // No progress animation for tile shortcut mode
 
         val progressDescription = when (timerState.status) {
-            RunStatus.RUNNING, RunStatus.PAUSED -> getString(
-                R.string.tile_progress_description,
-                phaseLabel,
-                remainingFormatted,
-            )
+            RunStatus.RUNNING, RunStatus.PAUSED -> getString(R.string.tile_timer_active)
             RunStatus.DONE -> getString(R.string.tile_progress_done, totalFormatted)
             else -> getString(R.string.tile_ready_to_start)
         }
 
         val centerText = when (timerState.status) {
+            RunStatus.RUNNING, RunStatus.PAUSED -> "--:--"
             RunStatus.DONE -> totalFormatted
             else -> remainingFormatted
         }
@@ -287,7 +274,7 @@ class SermonTileService : TileService() {
             buttonContentDescription = progressDescription,
             buttonAction = buttonAction,
             targetPresetId = targetPresetId,
-            progressFraction = fraction.coerceIn(0f, 1f),
+            progressFraction = if (timerState.status == RunStatus.RUNNING || timerState.status == RunStatus.PAUSED) 0f else fraction.coerceIn(0f, 1f),
             dynamicProgress = dynamicProgress,
             progressContentDescription = progressDescription,
             centerTextColor = snapshotColors.center,
@@ -303,6 +290,14 @@ class SermonTileService : TileService() {
         Segment.MAIN -> getString(R.string.segment_main)
         Segment.OUTRO -> getString(R.string.segment_outro)
         Segment.DONE -> getString(R.string.timer_done)
+    }
+
+    private fun logSnapshot(snapshot: TileSnapshot) {
+        val progress = String.format(Locale.US, "%.2f", snapshot.progressFraction)
+        Log.i(
+            TILE_LOG_TAG,
+            "Tile snapshot → status=${snapshot.status}, button='${snapshot.buttonText}', primary='${snapshot.primaryLabel}', secondary='${snapshot.secondaryLabel ?: ""}', targetPreset=${snapshot.targetPresetId ?: "none"}, progressFraction=$progress"
+        )
     }
 
     private val snapshotColors = TileColors()
@@ -328,6 +323,7 @@ class SermonTileService : TileService() {
 
     private enum class TileButtonAction(val intentAction: String) {
         START(TileActionActivity.ACTION_START),
+        VIEW_PROGRESS(TileActionActivity.ACTION_VIEW_PROGRESS),
         PAUSE(TileActionActivity.ACTION_PAUSE),
         RESUME(TileActionActivity.ACTION_RESUME),
     }

@@ -41,6 +41,7 @@ class TileActionActivity : Activity() {
                 }
                 openMainActivity()
             }
+            ACTION_VIEW_PROGRESS -> openMainActivity()
             ACTION_PAUSE -> TimerService.pauseService(applicationContext)
             ACTION_RESUME -> {
                 TimerService.resumeService(applicationContext)
@@ -79,6 +80,7 @@ class TileActionActivity : Activity() {
         const val EXTRA_PRESET_ID = "com.example.sermontimer.tile.EXTRA_PRESET_ID"
 
         const val ACTION_START = "start"
+        const val ACTION_VIEW_PROGRESS = "view_progress"
         const val ACTION_PAUSE = "pause"
         const val ACTION_RESUME = "resume"
     }

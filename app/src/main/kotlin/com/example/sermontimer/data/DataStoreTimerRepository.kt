@@ -2,10 +2,12 @@ package com.example.sermontimer.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import android.util.Log
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.TimerState
+import com.example.sermontimer.tile.TileUpdateDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -22,8 +24,11 @@ private object PreferencesKeys {
     val LAST_TIMER_STATE_JSON = stringPreferencesKey("last_timer_state_json")
 }
 
+private const val TIMER_LOG_TAG = "TIMER"
+
 class DataStoreTimerRepository(
     private val context: Context,
+    private val tileUpdateDispatcher: TileUpdateDispatcher,
     private val json: Json = Json { encodeDefaults = false }
 ) : TimerDataRepository {
 
@@ -88,6 +93,7 @@ class DataStoreTimerRepository(
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.PRESETS_JSON] = presetsJson
         }
+        tileUpdateDispatcher.requestTileUpdate()
     }
 
     override suspend fun savePreset(preset: Preset) {
@@ -113,6 +119,7 @@ class DataStoreTimerRepository(
     }
 
     override suspend fun setDefaultPresetId(presetId: String?) {
+        val previousId = defaultPresetId.first()
         context.dataStore.edit { preferences ->
             if (presetId != null) {
                 preferences[PreferencesKeys.DEFAULT_PRESET_ID] = presetId
@@ -120,6 +127,13 @@ class DataStoreTimerRepository(
                 preferences.remove(PreferencesKeys.DEFAULT_PRESET_ID)
             }
         }
+        if (previousId != presetId) {
+            Log.i(
+                TIMER_LOG_TAG,
+                "Default preset changed: ${previousId ?: "none"} -> ${presetId ?: "none"}"
+            )
+        }
+        tileUpdateDispatcher.requestTileUpdate()
     }
 
     override suspend fun saveTimerState(state: TimerState?) {
@@ -137,5 +151,6 @@ class DataStoreTimerRepository(
         context.dataStore.edit { preferences ->
             preferences.clear()
         }
+        tileUpdateDispatcher.requestTileUpdate()
     }
 }
