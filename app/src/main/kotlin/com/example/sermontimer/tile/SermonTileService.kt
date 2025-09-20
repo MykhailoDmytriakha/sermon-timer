@@ -101,6 +101,7 @@ class SermonTileService : TileService() {
             .setContentDescription(snapshot.buttonContentDescription)
             .build()
 
+
         // Create a centered layout with the app label and button
         return LayoutElementBuilders.Box.Builder()
             .setWidth(DimensionBuilders.expand())

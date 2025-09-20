@@ -12,6 +12,7 @@ import com.example.sermontimer.domain.model.RunStatus
 import com.example.sermontimer.domain.model.Segment
 import com.example.sermontimer.domain.model.SegmentDurations
 import com.example.sermontimer.domain.model.TimerState
+import com.example.sermontimer.domain.model.toActivePresetMeta
 import com.example.sermontimer.presentation.TimerViewModel
 import com.example.sermontimer.presentation.WearApp
 import com.example.sermontimer.ui.PresetListScreen
@@ -109,7 +110,7 @@ class TimerUISmokeTest {
             elapsedTotalSec = 55,
             durations = SegmentDurations(testPreset.introSec, testPreset.mainSec, testPreset.outroSec),
             startedAtElapsedRealtime = System.currentTimeMillis(),
-            activePreset = null // Simplified for test
+            activePreset = testPreset.toActivePresetMeta() // Provide active preset for RUNNING status
         )
 
         composeTestRule.setContent {
