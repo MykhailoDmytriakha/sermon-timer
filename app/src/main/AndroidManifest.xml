@@ -2,16 +2,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-        TIMING STRATEGY DECISION (September 19, 2025):
-        Using tick-based timing with 1-second intervals and elapsedRealtime() correction.
-        Provides adequate accuracy (±2.8s max deviation) for sermon timer use case.
-        Exact alarms rejected due to complexity, permissions, and minimal accuracy benefit.
-        See TIMING_STRATEGY_EVALUATION.md for detailed analysis.
+        TIMING STRATEGY:
+        - Core ticks every 1s with elapsedRealtime() correction to drive state/UI (see TIMING_STRATEGY_EVALUATION.md).
+        - Added September 25, 2025: schedule AlarmManager exact alarms (with allowWhileIdle) to start T-10 haptics when permission granted;
+          falls back to tick-only cadence if exact alarms are unavailable.
         Foreground service provides sufficient priority without manual wakelocks.
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
 
     <uses-feature android:name="android.hardware.type.watch" />
 

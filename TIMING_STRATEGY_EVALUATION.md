@@ -43,8 +43,8 @@ alarmManager.setExactAndAllowWhileIdle(
 
 ### Manifest Changes Required
 ```xml
-<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
 ```
 
 ### Pros
@@ -200,3 +200,15 @@ val correctedRemaining = segmentDuration - elapsedSinceStart
 *Evaluation Date: September 19, 2025*
 *Test Environment: Wear OS Emulator API 34*
 *Recommendation Valid Until: Android 16 / Wear OS 7*
+
+---
+
+## Addendum (September 25, 2025): Countdown Haptics Reliability
+
+To keep the last-10-second haptics reliable with the screen covered/off:
+
+- Prefer `AlarmManager.setExactAndAllowWhileIdle(ELAPSED_REALTIME_WAKEUP, PendingIntent)` at T−10s for the active boundary. On API 33+ we rely on the auto-granted `USE_EXACT_ALARM`; on API 31–32 users must grant “Alarms & reminders” (`SCHEDULE_EXACT_ALARM`). If the privilege is missing, we log a warning and fall back to `setExact(..., OnAlarmListener)`.
+- On trigger (from either path), start a single 10-second waveform (10× 500 ms on / 500 ms off) via `VibrationEffect.createWaveform(...)`; no per-second `Handler.postDelayed`.
+- Boundary haptic still comes from engine events; countdown alarm is cancelled on Pause/Stop/Boundary to save energy.
+
+Result: with permission granted we meet the ±0.1 s countdown goal even in Doze; without permission we fall back to the legacy tick-based accuracy (±1–2 s).

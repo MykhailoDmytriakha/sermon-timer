@@ -4,8 +4,10 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.wear.tiles.TileService
 import androidx.wear.tiles.TileUpdateRequester
@@ -30,6 +32,7 @@ class TimerService : Service() {
     private lateinit var serviceScope: CoroutineScope
     private lateinit var hapticPatterns: HapticPatterns
     private lateinit var tileUpdateRequester: TileUpdateRequester
+    private lateinit var countdownScheduler: CountdownAlarmScheduler
 
     private var timerJob: Job? = null
     private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
@@ -38,11 +41,20 @@ class TimerService : Service() {
     private var engineReady = false
     private val pendingCommands = mutableListOf<Pair<TimerCommand, (() -> Unit)?>>()
     private var observedNonIdleState = false
+    // Track countdown scheduling per upcoming boundary (monotonic ms)
+    private var scheduledCountdownForBoundaryMs: Long? = null
+    private var immediateCountdownStartedForBoundaryMs: Long? = null
+    private var exactAlarmAccessMissing = false
+    private var lastKnownState: TimerState? = null
 
     companion object {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "timer"
         private const val CHANNEL_NAME = "Timer Service"
+        private const val COUNTDOWN_SECONDS = 10
+        private const val COUNTDOWN_WINDOW_MS = COUNTDOWN_SECONDS * 1000L
+        private const val COUNTDOWN_GRACE_MS = 500L
+        private const val REQUEST_EXACT_ALARM_SETTINGS = 1001
 
         // Intent actions
         const val ACTION_START = "com.example.sermontimer.START"
@@ -50,9 +62,11 @@ class TimerService : Service() {
         const val ACTION_RESUME = "com.example.sermontimer.RESUME"
         const val ACTION_SKIP = "com.example.sermontimer.SKIP"
         const val ACTION_STOP = "com.example.sermontimer.STOP"
+        private const val ACTION_COUNTDOWN_ALARM = "com.example.sermontimer.COUNTDOWN_ALARM"
 
         // Intent extras
         const val EXTRA_PRESET_ID = "preset_id"
+        private const val EXTRA_COUNTDOWN_BOUNDARY_AT = "countdown_boundary_at"
 
         fun startService(context: Context, presetId: String) {
             val intent = Intent(context, TimerService::class.java).apply {
@@ -93,6 +107,13 @@ class TimerService : Service() {
             }
             context.startService(intent)
         }
+
+        internal fun createCountdownIntent(context: Context, boundaryAtElapsedMs: Long): Intent {
+            return Intent(context, TimerService::class.java).apply {
+                action = ACTION_COUNTDOWN_ALARM
+                putExtra(EXTRA_COUNTDOWN_BOUNDARY_AT, boundaryAtElapsedMs)
+            }
+        }
     }
 
     override fun onCreate() {
@@ -105,6 +126,12 @@ class TimerService : Service() {
         reducer = DefaultTimerStateReducer()
         hapticPatterns = HapticPatterns(this)
         tileUpdateRequester = TileService.getUpdater(applicationContext)
+        countdownScheduler = CountdownAlarmScheduler(
+            context = this,
+            onTrigger = { boundaryAtMs -> onCountdownAlarmFired(boundaryAtMs) },
+            onExactAlarmAccessMissing = { markExactAlarmAccessMissing() },
+            onExactAlarmAccessRestored = { clearExactAlarmAccessWarning() },
+        )
 
         // Try to recover state from DataStore
         serviceScope.launch {
@@ -146,6 +173,15 @@ class TimerService : Service() {
             ACTION_RESUME -> safeSubmit(TimerCommand.Resume(timeProvider.elapsedRealtimeMillis()))
             ACTION_SKIP -> safeSubmit(TimerCommand.SkipSegment(timeProvider.elapsedRealtimeMillis()))
             ACTION_STOP -> stopTimer()
+            ACTION_COUNTDOWN_ALARM -> {
+                val boundaryAtMs = intent.getLongExtra(EXTRA_COUNTDOWN_BOUNDARY_AT, -1L)
+                if (boundaryAtMs > 0) {
+                    android.util.Log.d("TIMER", "COUNTDOWN: pending intent fired for boundary=$boundaryAtMs")
+                    countdownScheduler.handlePendingIntentTrigger(boundaryAtMs)
+                } else {
+                    android.util.Log.w("TIMER", "COUNTDOWN: missing boundary extra in alarm intent")
+                }
+            }
             null -> {
                 // Service restarted by system, try to restore state
                 serviceScope.launch {
@@ -210,6 +246,7 @@ class TimerService : Service() {
     private fun observeTimerState() {
         serviceScope.launch {
             engine.state.collect { state ->
+                lastKnownState = state
                 updateNotification(state)
                 saveStateToDataStore(state)
                 try {
@@ -229,6 +266,9 @@ class TimerService : Service() {
                 if (state.status != RunStatus.IDLE) {
                     observedNonIdleState = true
                 }
+
+                // Countdown scheduling tied to upcoming boundary via AlarmManager
+                scheduleOrRunCountdown(state)
 
                 // Stop service after we've seen an active session return to idle
                 if (state.status == RunStatus.IDLE && observedNonIdleState) {
@@ -260,11 +300,80 @@ class TimerService : Service() {
         }
     }
 
+    private fun scheduleOrRunCountdown(state: TimerState) {
+        if (state.status != RunStatus.RUNNING || state.startedAtElapsedRealtime == null) {
+            resetCountdownScheduling()
+            return
+        }
+
+        val boundarySec = state.durations.cumulativeBoundaryFor(state.segment)
+        val boundaryAtMs = state.startedAtElapsedRealtime + boundarySec * 1000L
+        val triggerAtMs = boundaryAtMs - COUNTDOWN_WINDOW_MS
+        val now = timeProvider.elapsedRealtimeMillis()
+
+        if (state.remainingInSegmentSec > COUNTDOWN_SECONDS) {
+            if (triggerAtMs <= now) {
+                startCountdownForBoundary(boundaryAtMs)
+            } else if (scheduledCountdownForBoundaryMs != boundaryAtMs) {
+                android.util.Log.d("TIMER", "COUNTDOWN: scheduling at t=$triggerAtMs for boundary=$boundaryAtMs")
+                countdownScheduler.schedule(triggerAtMs, boundaryAtMs)
+                scheduledCountdownForBoundaryMs = boundaryAtMs
+                immediateCountdownStartedForBoundaryMs = null
+            }
+        } else if (state.remainingInSegmentSec in 1..COUNTDOWN_SECONDS) {
+            startCountdownForBoundary(boundaryAtMs)
+        } else {
+            resetCountdownScheduling()
+        }
+    }
+
+    private fun onCountdownAlarmFired(boundaryAtMs: Long) {
+        android.util.Log.d("TIMER", "COUNTDOWN: alarm fired for boundary=$boundaryAtMs")
+        startCountdownForBoundary(boundaryAtMs)
+    }
+
+    private fun startCountdownForBoundary(boundaryAtMs: Long) {
+        if (immediateCountdownStartedForBoundaryMs == boundaryAtMs) {
+            return
+        }
+        val now = timeProvider.elapsedRealtimeMillis()
+        val secondsLeft = calculateCountdownSeconds(boundaryAtMs, now) ?: run {
+            resetCountdownScheduling()
+            return
+        }
+        android.util.Log.d(
+            "TIMER",
+            "COUNTDOWN: starting countdown with secondsLeft=$secondsLeft (boundary=$boundaryAtMs, now=$now)",
+        )
+        countdownScheduler.cancel()
+        hapticPatterns.startCountdownVibration(secondsLeft)
+        immediateCountdownStartedForBoundaryMs = boundaryAtMs
+        scheduledCountdownForBoundaryMs = null
+    }
+
+    private fun calculateCountdownSeconds(boundaryAtMs: Long, nowMs: Long): Int? {
+        val millisLeft = boundaryAtMs - nowMs
+        if (millisLeft <= -COUNTDOWN_GRACE_MS) {
+            android.util.Log.d("TIMER", "COUNTDOWN: boundary already passed (delta=${millisLeft}ms) — skipping countdown")
+            return null
+        }
+        val remainingMs = millisLeft.coerceAtLeast(0L)
+        return (((remainingMs + 999L) / 1000L).toInt()).coerceIn(1, COUNTDOWN_SECONDS)
+    }
+
+    private fun resetCountdownScheduling() {
+        countdownScheduler.cancel()
+        scheduledCountdownForBoundaryMs = null
+        immediateCountdownStartedForBoundaryMs = null
+    }
+
     private fun startTimerJob() {
         timerJob = serviceScope.launch {
             while (isActive) {
                 delay(1.seconds)
-                engine.submit(TimerCommand.Tick(timeProvider.elapsedRealtimeMillis()))
+                val currentTime = timeProvider.elapsedRealtimeMillis()
+                android.util.Log.d("TIMER", "TICK: submitting Tick command at time=$currentTime")
+                engine.submit(TimerCommand.Tick(currentTime))
             }
         }
     }
@@ -308,6 +417,7 @@ class TimerService : Service() {
 
         // Add action buttons
         addNotificationActions(builder, state)
+        maybeAddExactAlarmHint(builder)
 
         return builder.build()
     }
@@ -356,6 +466,53 @@ class TimerService : Service() {
         }
     }
 
+    private fun maybeAddExactAlarmHint(builder: NotificationCompat.Builder) {
+        if (!exactAlarmAccessMissing) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || Build.VERSION.SDK_INT > Build.VERSION_CODES.S_V2) return
+
+        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        val pendingIntent = if (packageManager.resolveActivity(intent, 0) != null) {
+            PendingIntent.getActivity(
+                this,
+                REQUEST_EXACT_ALARM_SETTINGS,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        } else {
+            null
+        }
+
+        builder.setSubText(getString(R.string.notification_exact_alarm_needed))
+        if (pendingIntent != null) {
+            builder.addAction(
+                NotificationCompat.Action.Builder(
+                    0,
+                    getString(R.string.action_grant_alarm_access),
+                    pendingIntent,
+                ).build(),
+            )
+        }
+    }
+
+    private fun markExactAlarmAccessMissing() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || Build.VERSION.SDK_INT > Build.VERSION_CODES.S_V2) {
+            return
+        }
+        if (!exactAlarmAccessMissing) {
+            exactAlarmAccessMissing = true
+            lastKnownState?.let { updateNotification(it) }
+        }
+    }
+
+    private fun clearExactAlarmAccessWarning() {
+        if (exactAlarmAccessMissing) {
+            exactAlarmAccessMissing = false
+            lastKnownState?.let { updateNotification(it) }
+        }
+    }
+
     private fun createPauseAction() = NotificationCompat.Action.Builder(
         0, getString(R.string.action_pause),
         PendingIntent.getService(this, 1, Intent(this, TimerService::class.java).apply { action = ACTION_PAUSE }, PendingIntent.FLAG_IMMUTABLE)
@@ -400,24 +557,42 @@ class TimerService : Service() {
     }
 
     private fun handleBoundaryReached(event: TimerEvent.BoundaryReached) {
+        android.util.Log.d("TIMER", "EVENT: BoundaryReached - nextSegment=${event.nextSegment}")
+        // Stop any ongoing countdown vibration before playing boundary pattern
+        hapticPatterns.stopCountdownVibration()
+        resetCountdownScheduling()
         // Play haptic pattern for segment boundary according to AGENTS.md §10
         hapticPatterns.playBoundaryPattern(event.nextSegment)
     }
 
     private fun handleTimerCompleted() {
+        android.util.Log.d("TIMER", "EVENT: TimerCompleted")
+        // Stop any ongoing countdown vibration before playing completion pattern
+        hapticPatterns.stopCountdownVibration()
+        resetCountdownScheduling()
         // Play completion haptic pattern according to AGENTS.md §10
         hapticPatterns.playCompletionPattern()
     }
 
     private fun handleTimerPaused() {
+        android.util.Log.d("TIMER", "EVENT: TimerPaused")
+        // Stop countdown vibration when paused
+        hapticPatterns.stopCountdownVibration()
+        resetCountdownScheduling()
         // TODO: Add pause feedback if needed
     }
 
     private fun handleTimerResumed() {
+        android.util.Log.d("TIMER", "EVENT: TimerResumed")
+        // Countdown vibration will restart automatically in observeTimerState if in countdown phase
         // TODO: Add resume feedback if needed
     }
 
     private fun handleTimerStopped() {
+        android.util.Log.d("TIMER", "EVENT: TimerStopped")
+        // Stop countdown vibration when stopped
+        hapticPatterns.stopCountdownVibration()
+        resetCountdownScheduling()
         // TODO: Add stop feedback if needed
     }
 }

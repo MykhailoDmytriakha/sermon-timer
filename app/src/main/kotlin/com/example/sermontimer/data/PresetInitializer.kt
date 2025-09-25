@@ -21,29 +21,29 @@ class PresetInitializer(private val repository: TimerDataRepository) {
 
     private fun createDefaultPresets(): List<Preset> = listOf(
         Preset(
-            id = "sermon-5-20-5",
-            title = "Sermon 5-20-5",
-            introSec = 300, // 5 minutes
+            id = "sermon-7-20-8",
+            title = "Sermon 7-20-8",
+            introSec = 420, // 7 minutes
             mainSec = 1200, // 20 minutes
-            outroSec = 300, // 5 minutes
+            outroSec = 480, // 8 minutes
             allowSkip = true,
             soundEnabled = false
         ),
         Preset(
-            id = "meeting-3-15-3",
-            title = "Meeting 3-15-3",
-            introSec = 180, // 3 minutes
-            mainSec = 900, // 15 minutes
-            outroSec = 180, // 3 minutes
+            id = "small-group-15-20-15",
+            title = "Small Group 15-20-15",
+            introSec = 900, // 15 minutes
+            mainSec = 1200, // 20 minutes
+            outroSec = 900, // 15 minutes
             allowSkip = true,
             soundEnabled = false
         ),
         Preset(
-            id = "quick-2-10-2",
-            title = "Quick 2-10-2",
-            introSec = 120, // 2 minutes
-            mainSec = 600, // 10 minutes
-            outroSec = 120, // 2 minutes
+            id = "test-30s-30s-30s",
+            title = "Test 30s-30s-30s",
+            introSec = 30, // 30 seconds
+            mainSec = 30, // 30 seconds
+            outroSec = 30, // 30 seconds
             allowSkip = true,
             soundEnabled = false
         )

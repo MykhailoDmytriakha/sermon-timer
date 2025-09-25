@@ -85,6 +85,7 @@
 * Энергопрофиль: тики 1–2 с; экран не удерживается включённым.
 * Надёжность: корректная работа в Doze; точность рубежей не хуже ±1–2 с.
 * Доступность: большой шрифт, высокий контраст; управление одной кнопкой.
+* Разрешения: на Wear OS 5 (API 34) используем `USE_EXACT_ALARM`, поэтому спец-доступ не отображается в настройках. На Wear OS 3.x (API 31–32) остаётся требование к «Будильники и напоминания» (`SCHEDULE_EXACT_ALARM`); без него приложение падает обратно на тики (возможна задержка до ~2 с в Doze).
 
 ### Платформа
 
@@ -103,8 +104,8 @@
 
 **Варианты точности:**
 
-* A) *AlarmManager.setExactAndAllowWhileIdle()* на конец каждой секции (надёжно в Doze).
-* B) Тики + коррекция по `elapsedRealtime()` (проще, допустимая точность для зала).
+* A) *AlarmManager.setExactAndAllowWhileIdle()* на T−10 обратного отсчёта + границу (основной путь: `USE_EXACT_ALARM` на API 33+, `SCHEDULE_EXACT_ALARM` иначе).
+* B) Тики + коррекция по `elapsedRealtime()` — fallback при отсутствии доступа к точным будильникам (точность ±1–2 с в Doze).
 
 ---
 
@@ -199,7 +200,8 @@ Idle → Running(INTRO) → boundary → Running(MAIN) → boundary → Running(
 2. **SDK/AVD:** Wear OS Large Round; **API 34 / Android 14**; **Services = Google Play Store**; образ: *Wear OS 5 ARM64 v8a*.
 3. **Run:** запусти эмулятор → выбери модуль *wear* → Run.
 4. **Реальные часы:** включить Developer Options → ADB over Wi‑Fi → `adb connect <ip>:5555` → Run/Install.
-5. **Профили сборки:** `debug` (короткие пресеты 5‑10‑5 сек, логи), `release` (реальные длительности, минимум логирования).
+5. **Exact alarms:** Settings → Apps & notifications → Special app access → **Alarms & reminders** → включи Sermon Timer (на эмуляторе: Settings → Apps → Special app access → Alarms & reminders). Иначе обратный отсчёт T−10 в Doze может работать с задержкой.
+6. **Профили сборки:** `debug` (короткие пресеты 5‑10‑5 сек, логи), `release` (реальные длительности, минимум логирования).
 
 ---
 
