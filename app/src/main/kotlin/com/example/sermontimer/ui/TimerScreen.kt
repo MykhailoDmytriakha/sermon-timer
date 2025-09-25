@@ -2,7 +2,7 @@ package com.example.sermontimer.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -11,24 +11,33 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.wear.compose.material.*
+import androidx.wear.compose.material.Button
+import androidx.wear.compose.material.ButtonDefaults
+import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.Text
 import com.example.sermontimer.R
+import com.example.sermontimer.domain.model.ActivePresetMeta
 import com.example.sermontimer.domain.model.RunStatus
 import com.example.sermontimer.domain.model.Segment
-import com.example.sermontimer.domain.model.TimerState
 import com.example.sermontimer.domain.model.SegmentDurations
-import com.example.sermontimer.domain.model.ActivePresetMeta
-import com.example.sermontimer.service.TimerService
+import com.example.sermontimer.domain.model.TimerState
+import com.example.sermontimer.presentation.AmbientUiState
 import com.example.sermontimer.util.DurationFormatter
 
 @Composable
 fun TimerScreen(
     timerState: TimerState,
+    ambientState: AmbientUiState,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onSkip: () -> Unit,
     onStop: () -> Unit,
 ) {
+    if (ambientState.isAmbient) {
+        AmbientTimerLayout(timerState = timerState, ambientState = ambientState)
+        return
+    }
+
     val backgroundColor = when (timerState.segment) {
         Segment.INTRO -> Color(0xFF4CAF50) // Green
         Segment.MAIN -> Color(0xFF2196F3)  // Blue
@@ -155,6 +164,59 @@ fun TimerScreen(
     }
 }
 
+@Composable
+private fun AmbientTimerLayout(timerState: TimerState, ambientState: AmbientUiState) {
+    val textColor = Color.White
+    val supportingColor = if (ambientState.isLowBit) Color.White else Color.White.copy(alpha = 0.7f)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        val phaseLabel = when (timerState.segment) {
+            Segment.INTRO -> stringResource(R.string.segment_intro)
+            Segment.MAIN -> stringResource(R.string.segment_main)
+            Segment.OUTRO -> stringResource(R.string.segment_outro)
+            Segment.DONE -> stringResource(R.string.timer_done)
+        }
+
+        Text(
+            text = phaseLabel,
+            style = MaterialTheme.typography.caption1,
+            color = textColor,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = DurationFormatter.formatTimerDisplay(timerState.remainingInSegmentSec),
+            style = MaterialTheme.typography.display1,
+            color = textColor,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        val statusLabel = when (timerState.status) {
+            RunStatus.PAUSED -> stringResource(R.string.action_pause)
+            RunStatus.DONE -> stringResource(R.string.timer_done)
+            RunStatus.RUNNING -> stringResource(R.string.tile_timer_running)
+            else -> stringResource(R.string.timer_ready)
+        }
+
+        Text(
+            text = statusLabel,
+            style = MaterialTheme.typography.caption2,
+            color = supportingColor,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
 @Preview(device = "id:wear_os_large_round", showSystemUi = true)
 @Composable
 fun TimerScreenRunningPreview() {
@@ -175,6 +237,7 @@ fun TimerScreenRunningPreview() {
 
     TimerScreen(
         timerState = mockState,
+        ambientState = AmbientUiState(),
         onPause = {},
         onResume = {},
         onSkip = {},
@@ -202,6 +265,35 @@ fun TimerScreenPausedPreview() {
 
     TimerScreen(
         timerState = mockState,
+        ambientState = AmbientUiState(),
+        onPause = {},
+        onResume = {},
+        onSkip = {},
+        onStop = {}
+    )
+}
+
+@Preview(device = "id:wear_os_large_round", showSystemUi = true)
+@Composable
+fun TimerScreenAmbientPreview() {
+    val mockState = TimerState(
+        status = RunStatus.RUNNING,
+        segment = Segment.INTRO,
+        remainingInSegmentSec = 45,
+        elapsedTotalSec = 120,
+        durations = SegmentDurations(300, 1200, 300),
+        startedAtElapsedRealtime = 1000L,
+        activePreset = ActivePresetMeta(
+            id = "test",
+            durations = SegmentDurations(300, 1200, 300),
+            allowSkip = true,
+            soundEnabled = false
+        )
+    )
+
+    TimerScreen(
+        timerState = mockState,
+        ambientState = AmbientUiState(isAmbient = true),
         onPause = {},
         onResume = {},
         onSkip = {},

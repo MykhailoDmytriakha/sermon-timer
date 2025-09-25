@@ -1,14 +1,20 @@
 package com.example.sermontimer.service
 
+import android.Manifest
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import androidx.wear.ongoing.OngoingActivity
+import androidx.wear.ongoing.Status
 import androidx.wear.tiles.TileService
 import androidx.wear.tiles.TileUpdateRequester
 import com.example.sermontimer.R
@@ -19,6 +25,7 @@ import com.example.sermontimer.domain.time.MonotonicTimeProvider
 import com.example.sermontimer.presentation.MainActivity
 import com.example.sermontimer.tile.SermonTileService
 import com.example.sermontimer.util.HapticPatterns
+import com.example.sermontimer.util.DurationFormatter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlin.time.Duration.Companion.seconds
@@ -412,24 +419,22 @@ class TimerService : Service() {
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(state.isActive)
+            .setOngoing(state.status == RunStatus.RUNNING || state.status == RunStatus.PAUSED)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setContentIntent(createActivityIntent())
 
         // Add action buttons
         addNotificationActions(builder, state)
         maybeAddExactAlarmHint(builder)
 
+        maybeApplyOngoingActivity(builder, state)
+
         return builder.build()
     }
 
     private fun buildNotificationTitle(state: TimerState): String {
         val presetName = state.activePreset?.id ?: getString(R.string.app_name)
-        val phaseText = when (state.segment) {
-            Segment.INTRO -> getString(R.string.segment_intro_short)
-            Segment.MAIN -> getString(R.string.segment_main_short)
-            Segment.OUTRO -> getString(R.string.segment_outro_short)
-            Segment.DONE -> getString(R.string.timer_done)
-        }
+        val phaseText = getPhaseShortLabel(state.segment)
         return "$presetName • $phaseText"
     }
 
@@ -496,6 +501,68 @@ class TimerService : Service() {
         }
     }
 
+    private fun maybeApplyOngoingActivity(builder: NotificationCompat.Builder, state: TimerState) {
+        if (!shouldDisplayOngoingActivity(state)) {
+            return
+        }
+        if (!hasNotificationPermission()) {
+            return
+        }
+
+        val statusText = buildOngoingStatusText(state)
+        val status = Status.Builder()
+            .addTemplate(statusText)
+            .build()
+
+        val ongoingActivity = OngoingActivity.Builder(applicationContext, NOTIFICATION_ID, builder)
+            .setStaticIcon(Icon.createWithResource(this, R.drawable.ic_timer_ongoing))
+            .setTouchIntent(createActivityIntent())
+            .setStatus(status)
+            .build()
+
+        ongoingActivity.apply(applicationContext)
+    }
+
+    private fun shouldDisplayOngoingActivity(state: TimerState): Boolean {
+        return state.status == RunStatus.RUNNING || state.status == RunStatus.PAUSED
+    }
+
+    private fun hasNotificationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    private fun buildOngoingStatusText(state: TimerState): String {
+        val phaseLabel = getPhaseLabel(state.segment)
+        return if (state.status == RunStatus.PAUSED) {
+            getString(R.string.ongoing_status_paused, phaseLabel)
+        } else {
+            val remaining = DurationFormatter.formatTimerDisplay(state.remainingInSegmentSec)
+            getString(R.string.ongoing_status_running, phaseLabel, remaining)
+        }
+    }
+
+    private fun getPhaseLabel(segment: Segment): String {
+        return when (segment) {
+            Segment.INTRO -> getString(R.string.segment_intro)
+            Segment.MAIN -> getString(R.string.segment_main)
+            Segment.OUTRO -> getString(R.string.segment_outro)
+            Segment.DONE -> getString(R.string.timer_done)
+        }
+    }
+
+    private fun getPhaseShortLabel(segment: Segment): String {
+        return when (segment) {
+            Segment.INTRO -> getString(R.string.segment_intro_short)
+            Segment.MAIN -> getString(R.string.segment_main_short)
+            Segment.OUTRO -> getString(R.string.segment_outro_short)
+            Segment.DONE -> getString(R.string.timer_done)
+        }
+    }
+
     private fun markExactAlarmAccessMissing() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || Build.VERSION.SDK_INT > Build.VERSION_CODES.S_V2) {
             return
@@ -533,15 +600,21 @@ class TimerService : Service() {
         PendingIntent.getService(this, 4, Intent(this, TimerService::class.java).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE)
     ).build()
 
-    private fun createActivityIntent() = PendingIntent.getActivity(
-        this, 0, Intent(this, MainActivity::class.java).apply {
+    private fun createActivityIntent(): PendingIntent {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             // Include current preset ID for preset-aware navigation if engine is ready
             if (::engine.isInitialized) {
                 putExtra("preset_id", engine.state.value.activePreset?.id)
             }
-        },
-        PendingIntent.FLAG_IMMUTABLE
-    )
+        }
+        return PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

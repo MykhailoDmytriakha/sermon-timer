@@ -34,6 +34,9 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _editorTargetPreset = MutableStateFlow<Preset?>(null)
     val editorTargetPreset: StateFlow<Preset?> = _editorTargetPreset.asStateFlow()
 
+    private val _ambientState = MutableStateFlow(AmbientUiState())
+    val ambientState: StateFlow<AmbientUiState> = _ambientState.asStateFlow()
+
     init {
         loadData()
         observeTimerState()
@@ -134,6 +137,14 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     fun stopTimer() {
         TimerService.stopService(getApplication())
         navigateToPresetList()
+    }
+
+    fun updateAmbientState(isAmbient: Boolean, isLowBit: Boolean, requiresBurnInProtection: Boolean) {
+        _ambientState.value = AmbientUiState(
+            isAmbient = isAmbient,
+            isLowBit = isLowBit,
+            requiresBurnInProtection = requiresBurnInProtection
+        )
     }
 
     // Preset management

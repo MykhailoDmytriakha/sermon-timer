@@ -13,6 +13,7 @@ fun WearApp(viewModel: TimerViewModel) {
     val presets by viewModel.presets.collectAsState()
     val defaultPresetId by viewModel.defaultPresetId.collectAsState()
     val editorTarget by viewModel.editorTargetPreset.collectAsState()
+    val ambientUiState by viewModel.ambientState.collectAsState()
 
     when (currentScreen) {
         TimerViewModel.Screen.PresetList -> {
@@ -34,6 +35,7 @@ fun WearApp(viewModel: TimerViewModel) {
             timerState?.let { state ->
                 TimerScreen(
                     timerState = state,
+                    ambientState = ambientUiState,
                     onPause = { viewModel.pauseTimer() },
                     onResume = { viewModel.resumeTimer() },
                     onSkip = { viewModel.skipSegment() },
