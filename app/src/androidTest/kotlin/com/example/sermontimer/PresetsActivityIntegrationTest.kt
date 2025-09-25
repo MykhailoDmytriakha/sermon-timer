@@ -186,6 +186,7 @@ class PresetsActivityIntegrationTest {
                 presets = listOf(presetA, presetB, presetC),
                 defaultPresetId = presetA.id,
                 onPresetSelected = {},
+                onStartTimer = {},
                 onAddPreset = {},
                 onEditPreset = {},
                 onSetDefault = {}
@@ -204,6 +205,7 @@ class PresetsActivityIntegrationTest {
                 presets = listOf(presetB, presetA, presetC), // presetB now first
                 defaultPresetId = presetB.id,
                 onPresetSelected = {},
+                onStartTimer = {},
                 onAddPreset = {},
                 onEditPreset = {},
                 onSetDefault = {}
@@ -222,6 +224,7 @@ class PresetsActivityIntegrationTest {
                 presets = listOf(presetA, presetB, presetC),
                 defaultPresetId = presetA.id,
                 onPresetSelected = {},
+                onStartTimer = {},
                 onAddPreset = {},
                 onEditPreset = {},
                 onSetDefault = {}
@@ -245,6 +248,7 @@ class PresetsActivityIntegrationTest {
                 presets = listOf(presetA, presetB, presetC),
                 defaultPresetId = presetA.id,
                 onPresetSelected = {},
+                onStartTimer = {},
                 onAddPreset = {},
                 onEditPreset = {},
                 onSetDefault = {}

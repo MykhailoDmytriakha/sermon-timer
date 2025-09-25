@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.wear.compose.material.Icon
 import androidx.compose.runtime.*
@@ -30,6 +31,7 @@ fun PresetListScreen(
     presets: List<Preset>,
     defaultPresetId: String?,
     onPresetSelected: (Preset) -> Unit,
+    onStartTimer: (Preset) -> Unit,
     onAddPreset: () -> Unit,
     onEditPreset: (Preset) -> Unit,
     onSetDefault: (String?) -> Unit,
@@ -112,7 +114,7 @@ fun PresetListScreen(
                 .fillMaxSize()
                 .testTag("preset-list"),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             item {
                 Text(
@@ -129,6 +131,7 @@ fun PresetListScreen(
                     isDefault = preset.id == defaultPresetId,
                     onClick = { onPresetSelected(preset) },
                     onEdit = { onEditPreset(preset) },
+                    onStartTimer = { onStartTimer(preset) },
                     onSetDefault = { onSetDefault(if (it) preset.id else null) },
                     onShowSetDefaultDialog = { showSetDefaultConfirmation = it }
                 )
@@ -159,6 +162,7 @@ fun PresetListItem(
     isDefault: Boolean,
     onClick: () -> Unit,
     onEdit: () -> Unit,
+    onStartTimer: () -> Unit,
     onSetDefault: (Boolean) -> Unit,
     onShowSetDefaultDialog: (Preset) -> Unit,
 ) {
@@ -171,7 +175,7 @@ fun PresetListItem(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(horizontal = 5.dp, vertical = 1.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -188,10 +192,10 @@ fun PresetListItem(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+//                    Spacer(modifier = Modifier.height(1.dp))
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(5.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth(),
@@ -203,11 +207,29 @@ fun PresetListItem(
                     onClick = onEdit,
                     modifier = Modifier.size(44.dp), // 44dp for optimal touch target per guidelines
                     shape = RoundedCornerShape(22.dp), // Perfect circle for familiarity
-                    colors = ButtonDefaults.secondaryButtonColors()
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
+                        contentColor = MaterialTheme.colors.secondary,
+                        disabledBackgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
+                        disabledContentColor = MaterialTheme.colors.primary
+                    )
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Edit,
                         contentDescription = stringResource(R.string.action_edit)
+                    )
+                }
+
+                // Play button
+                Button(
+                    onClick = onStartTimer,
+                    modifier = Modifier.size(44.dp), // 44dp for optimal touch target per guidelines
+                    shape = RoundedCornerShape(22.dp), // Perfect circle for familiarity
+                    colors = ButtonDefaults.primaryButtonColors()
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(R.string.action_play)
                     )
                 }
 
@@ -219,7 +241,12 @@ fun PresetListItem(
                         onClick = { onShowSetDefaultDialog(preset) },
                         modifier = Modifier.size(44.dp), // 44dp for optimal touch target per guidelines
                         shape = RoundedCornerShape(22.dp), // Perfect circle for familiarity
-                        colors = ButtonDefaults.secondaryButtonColors()
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
+                            contentColor = MaterialTheme.colors.secondary,
+                            disabledBackgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
+                            disabledContentColor = MaterialTheme.colors.primary
+                        )
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PushPin,
@@ -272,6 +299,7 @@ fun PresetListScreenPreview() {
         presets = mockPresets,
         defaultPresetId = "1", // Preset "1" should appear first despite alphabetical order
         onPresetSelected = {},
+        onStartTimer = {},
         onAddPreset = {},
         onEditPreset = {},
         onSetDefault = {}

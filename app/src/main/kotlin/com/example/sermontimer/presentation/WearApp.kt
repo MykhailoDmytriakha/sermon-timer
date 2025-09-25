@@ -23,6 +23,9 @@ fun WearApp(viewModel: TimerViewModel) {
                 onPresetSelected = { preset ->
                     viewModel.startTimer(preset)
                 },
+                onStartTimer = { preset ->
+                    viewModel.startTimer(preset)
+                },
                 onAddPreset = { viewModel.startAddPresetFlow() },
                 onEditPreset = { preset -> viewModel.startEditPresetFlow(preset) },
                 onSetDefault = { presetId ->
@@ -47,6 +50,7 @@ fun WearApp(viewModel: TimerViewModel) {
                     presets = presets,
                     defaultPresetId = defaultPresetId,
                     onPresetSelected = { preset -> viewModel.startTimer(preset) },
+                    onStartTimer = { preset -> viewModel.startTimer(preset) },
                     onAddPreset = {},
                     onEditPreset = {},
                     onSetDefault = { viewModel.setDefaultPreset(it) }

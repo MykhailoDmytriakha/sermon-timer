@@ -34,6 +34,7 @@
     <string name="action_skip">Skip</string>
     <string name="action_stop">Stop</string>
     <string name="action_start">Start</string>
+    <string name="action_play">Play</string>
     <string name="action_view_progress">View Progress</string>
     <string name="action_back">Back</string>
     <string name="action_grant_alarm_access">Grant alarm access</string>

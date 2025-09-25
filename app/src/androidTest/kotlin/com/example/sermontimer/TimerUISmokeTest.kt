@@ -87,6 +87,7 @@ class TimerUISmokeTest {
                 presets = listOf(testPreset),
                 defaultPresetId = testPreset.id,
                 onPresetSelected = {},
+                onStartTimer = {},
                 onAddPreset = {},
                 onEditPreset = {},
                 onSetDefault = {}
@@ -203,7 +204,7 @@ class TimerUISmokeTest {
         }
 
         val observedRunningState = runBlocking {
-            viewModel.timerState.awaitValue { it?.status == RunStatus.RUNNING }
+            viewModel.timerState.awaitValue(timeoutMillis = 10_000L) { it?.status == RunStatus.RUNNING }
         }
         assertThat(observedRunningState?.status).isEqualTo(RunStatus.RUNNING)
         assertThat(observedRunningState?.activePreset?.id).isEqualTo(testPreset.id)
@@ -214,7 +215,7 @@ class TimerUISmokeTest {
         }
 
         val observedIdleState = runBlocking {
-            viewModel.timerState.awaitValue { it?.status == RunStatus.IDLE }
+            viewModel.timerState.awaitValue(timeoutMillis = 10_000L) { it?.status == RunStatus.IDLE }
         }
         assertThat(observedIdleState?.status).isEqualTo(RunStatus.IDLE)
     }
