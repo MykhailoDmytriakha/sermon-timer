@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -107,7 +108,9 @@ fun PresetListScreen(
             timeText = { TimeText() }
         ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("preset-list"),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -134,7 +137,9 @@ fun PresetListScreen(
             item {
                 Button(
                     onClick = onAddPreset,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("add-preset")
                 ) {
                     Text(text = stringResource(R.string.add_preset))
                 }
@@ -157,7 +162,12 @@ fun PresetListItem(
     onSetDefault: (Boolean) -> Unit,
     onShowSetDefaultDialog: (Preset) -> Unit,
 ) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("preset-${preset.id}")
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

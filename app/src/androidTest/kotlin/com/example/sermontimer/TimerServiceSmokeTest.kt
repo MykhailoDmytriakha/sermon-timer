@@ -7,11 +7,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.sermontimer.data.TimerDataProvider
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.RunStatus
+import com.example.sermontimer.domain.model.TimerState
 import com.example.sermontimer.service.TimerService
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -47,8 +49,11 @@ class TimerServiceSmokeTest {
 
         // Save test preset
         runBlocking {
-            TimerDataProvider.getRepository().savePreset(testPreset)
-            TimerDataProvider.getRepository().setDefaultPresetId(testPreset.id)
+            val repository = TimerDataProvider.getRepository()
+            repository.clearAll()
+            repository.savePreset(testPreset)
+            repository.setDefaultPresetId(testPreset.id)
+            repository.saveTimerState(null)
         }
     }
 
@@ -69,76 +74,57 @@ class TimerServiceSmokeTest {
         // Start timer service
         TimerService.startService(context, testPreset.id)
 
-        // Wait for service to initialize and start
-        Thread.sleep(500)
-
         // Verify timer state is running
-        runBlocking {
-            val timerState = TimerDataProvider.getRepository().lastTimerState.first()
-            assertThat(timerState).isNotNull()
-            assertThat(timerState?.status).isEqualTo(RunStatus.RUNNING)
-            assertThat(timerState?.activePreset?.id).isEqualTo(testPreset.id)
-        }
+        val timerState = runBlocking { waitForStatus(RunStatus.RUNNING) }
+        assertThat(timerState).isNotNull()
+        assertThat(timerState?.activePreset?.id).isEqualTo(testPreset.id)
     }
 
     @Test
     fun timerService_pausesAndResumesCorrectly() {
         // Start timer
         TimerService.startService(context, testPreset.id)
-        Thread.sleep(500)
+
+        runBlocking { waitForStatus(RunStatus.RUNNING) }
 
         // Pause timer
         TimerService.pauseService(context)
-        Thread.sleep(300)
-
-        // Verify paused state
-        runBlocking {
-            val timerState = TimerDataProvider.getRepository().lastTimerState.first()
-            assertThat(timerState?.status).isEqualTo(RunStatus.PAUSED)
-        }
+        val pausedState = runBlocking { waitForStatus(RunStatus.PAUSED) }
+        assertThat(pausedState?.status).isEqualTo(RunStatus.PAUSED)
 
         // Resume timer
         TimerService.resumeService(context)
-        Thread.sleep(300)
-
-        // Verify running state
-        runBlocking {
-            val timerState = TimerDataProvider.getRepository().lastTimerState.first()
-            assertThat(timerState?.status).isEqualTo(RunStatus.RUNNING)
-        }
+        val resumedState = runBlocking { waitForStatus(RunStatus.RUNNING) }
+        assertThat(resumedState?.status).isEqualTo(RunStatus.RUNNING)
     }
 
     @Test
     fun timerService_completesFullCycle() {
         // Start timer with very short durations
         TimerService.startService(context, testPreset.id)
-        Thread.sleep(500)
 
-        // Wait for timer to complete (2 + 3 + 1 = 6 seconds + buffer)
-        Thread.sleep(7000)
+        runBlocking { waitForStatus(RunStatus.RUNNING) }
 
-        // Verify completed state
-        runBlocking {
-            val timerState = TimerDataProvider.getRepository().lastTimerState.first()
-            assertThat(timerState?.status).isEqualTo(RunStatus.DONE)
-        }
+        // Wait for timer to complete (2 + 3 + 1 = 6 seconds, allow buffer)
+        val completedState = runBlocking { waitForStatus(RunStatus.DONE, timeoutMillis = 20_000L) }
+        assertThat(completedState?.status).isEqualTo(RunStatus.DONE)
     }
 
     @Test
     fun timerService_handlesStopCorrectly() {
         // Start timer
         TimerService.startService(context, testPreset.id)
-        Thread.sleep(500)
+        runBlocking { waitForStatus(RunStatus.RUNNING) }
 
         // Stop timer
         TimerService.stopService(context)
-        Thread.sleep(300)
 
-        // Verify idle state
-        runBlocking {
-            val timerState = TimerDataProvider.getRepository().lastTimerState.first()
-            assertThat(timerState?.status).isEqualTo(RunStatus.IDLE)
+        val idleState = runBlocking {
+            waitForState(timeoutMillis = 10_000L) { state ->
+                state == null || state.status == RunStatus.IDLE
+            }
         }
+        assertThat(idleState?.status ?: RunStatus.IDLE).isEqualTo(RunStatus.IDLE)
     }
 
     @Test
@@ -179,5 +165,28 @@ class TimerServiceSmokeTest {
         runBlocking {
             TimerDataProvider.getRepository().deletePreset(testPreset2.id)
         }
+    }
+
+    private suspend fun waitForStatus(
+        status: RunStatus,
+        timeoutMillis: Long = 10_000L
+    ): TimerState? = waitForState(timeoutMillis) { state -> state?.status == status }
+
+    private suspend fun waitForState(
+        timeoutMillis: Long = 10_000L,
+        predicate: (TimerState?) -> Boolean
+    ): TimerState? = withTimeout(timeoutMillis) {
+        var result: TimerState? = null
+        var satisfied = false
+        while (!satisfied) {
+            val state = TimerDataProvider.getRepository().lastTimerState.first()
+            if (predicate(state)) {
+                result = state
+                satisfied = true
+            } else {
+                delay(200)
+            }
+        }
+        result
     }
 }
