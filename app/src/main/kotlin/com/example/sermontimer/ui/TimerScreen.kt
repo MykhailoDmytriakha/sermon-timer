@@ -2,6 +2,10 @@ package com.example.sermontimer.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -13,8 +17,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
+import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
+import androidx.wear.compose.material.TimeText
 import com.example.sermontimer.R
 import com.example.sermontimer.domain.model.ActivePresetMeta
 import com.example.sermontimer.domain.model.RunStatus
@@ -45,13 +52,16 @@ fun TimerScreen(
         Segment.DONE -> Color(0xFF9C27B0)  // Purple
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(backgroundColor),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Scaffold(
+        timeText = { TimeText() }
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(backgroundColor),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
         // Segment indicator
         Text(
             text = when (timerState.segment) {
@@ -88,9 +98,10 @@ fun TimerScreen(
                         onClick = onPause,
                         colors = ButtonDefaults.buttonColors(backgroundColor = Color.White.copy(alpha = 0.2f))
                     ) {
-                        Text(
-                            text = stringResource(R.string.action_pause),
-                            color = Color.White
+                        Icon(
+                            imageVector = Icons.Filled.Pause,
+                            contentDescription = stringResource(R.string.action_pause),
+                            tint = Color.White
                         )
                     }
 
@@ -110,9 +121,10 @@ fun TimerScreen(
                         onClick = onStop,
                         colors = ButtonDefaults.buttonColors(backgroundColor = Color.Red.copy(alpha = 0.8f))
                     ) {
-                        Text(
-                            text = stringResource(R.string.action_stop),
-                            color = Color.White
+                        Icon(
+                            imageVector = Icons.Filled.Stop,
+                            contentDescription = stringResource(R.string.action_stop),
+                            tint = Color.White
                         )
                     }
                 }
@@ -122,9 +134,10 @@ fun TimerScreen(
                         onClick = onResume,
                         colors = ButtonDefaults.buttonColors(backgroundColor = Color.White.copy(alpha = 0.2f))
                     ) {
-                        Text(
-                            text = stringResource(R.string.action_resume),
-                            color = Color.White
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = stringResource(R.string.action_resume),
+                            tint = Color.White
                         )
                     }
 
@@ -132,9 +145,10 @@ fun TimerScreen(
                         onClick = onStop,
                         colors = ButtonDefaults.buttonColors(backgroundColor = Color.Red.copy(alpha = 0.8f))
                     ) {
-                        Text(
-                            text = stringResource(R.string.action_stop),
-                            color = Color.White
+                        Icon(
+                            imageVector = Icons.Filled.Stop,
+                            contentDescription = stringResource(R.string.action_stop),
+                            tint = Color.White
                         )
                     }
                 }
@@ -144,9 +158,10 @@ fun TimerScreen(
                         onClick = onStop,
                         colors = ButtonDefaults.buttonColors(backgroundColor = Color.White.copy(alpha = 0.2f))
                     ) {
-                        Text(
-                            text = stringResource(R.string.action_stop),
-                            color = Color.White
+                        Icon(
+                            imageVector = Icons.Filled.Stop,
+                            contentDescription = stringResource(R.string.action_stop),
+                            tint = Color.White
                         )
                     }
                 }
@@ -162,20 +177,24 @@ fun TimerScreen(
             }
         }
     }
+    }
 }
 
 @Composable
 private fun AmbientTimerLayout(timerState: TimerState, ambientState: AmbientUiState) {
     val textColor = Color.White
     val supportingColor = if (ambientState.isLowBit) Color.White else Color.White.copy(alpha = 0.7f)
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Scaffold(
+        timeText = { TimeText() }
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
         val phaseLabel = when (timerState.segment) {
             Segment.INTRO -> stringResource(R.string.segment_intro)
             Segment.MAIN -> stringResource(R.string.segment_main)
@@ -214,6 +233,7 @@ private fun AmbientTimerLayout(timerState: TimerState, ambientState: AmbientUiSt
             color = supportingColor,
             textAlign = TextAlign.Center
         )
+    }
     }
 }
 

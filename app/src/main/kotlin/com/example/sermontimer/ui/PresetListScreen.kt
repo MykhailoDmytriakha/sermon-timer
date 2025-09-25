@@ -6,11 +6,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PushPin
 import androidx.wear.compose.material.Icon
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -176,20 +179,13 @@ fun PresetListItem(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = preset.formatDuration(),
-                        style = MaterialTheme.typography.caption1,
-                        color = MaterialTheme.colors.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Edit button - round icon button (following best practices)
@@ -209,19 +205,18 @@ fun PresetListItem(
                 if (isDefault) {
                     DefaultBadge()
                 } else {
-                    CompactChip(
+                    Button(
                         onClick = { onShowSetDefaultDialog(preset) },
-                        modifier = Modifier.weight(1f),
-                        label = {
-                            Text(
-                                text = stringResource(R.string.set_default),
-                                style = MaterialTheme.typography.caption2.copy(
-                                    fontSize = MaterialTheme.typography.caption2.fontSize * 0.9f
-                                ),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    )
+                        modifier = Modifier.size(44.dp), // 44dp for optimal touch target per guidelines
+                        shape = RoundedCornerShape(22.dp), // Perfect circle for familiarity
+                        colors = ButtonDefaults.secondaryButtonColors()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PushPin,
+                            contentDescription = stringResource(R.string.set_default),
+                            modifier = Modifier.rotate(15f) // Tilt the pin icon for dynamic appearance
+                        )
+                    }
                 }
             }
         }
@@ -230,23 +225,23 @@ fun PresetListItem(
 
 @Composable
 private fun DefaultBadge() {
-    CompactChip(
+    Button(
         onClick = {}, // No action needed for display
         enabled = false,
-        label = {
-            Text(
-                text = stringResource(R.string.default_label),
-                style = MaterialTheme.typography.caption2.copy(
-                    fontSize = MaterialTheme.typography.caption2.fontSize * 0.9f
-                ),
-                textAlign = TextAlign.Center
-            )
-        },
-        colors = ChipDefaults.chipColors(
+        modifier = Modifier.size(44.dp), // 44dp for optimal touch target per guidelines
+        shape = RoundedCornerShape(22.dp), // Perfect circle for familiarity
+        colors = ButtonDefaults.buttonColors(
             backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
-            contentColor = MaterialTheme.colors.primary
+            contentColor = MaterialTheme.colors.primary,
+            disabledBackgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
+            disabledContentColor = MaterialTheme.colors.primary
         )
-    )
+    ) {
+        Icon(
+            imageVector = Icons.Filled.CheckCircle,
+            contentDescription = stringResource(R.string.default_label)
+        )
+    }
 }
 
 private fun Preset.formatDuration(): String {

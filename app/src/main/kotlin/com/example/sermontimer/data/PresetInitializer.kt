@@ -37,15 +37,15 @@ class PresetInitializer(private val repository: TimerDataRepository) {
             outroSec = 900, // 15 minutes
             allowSkip = true,
             soundEnabled = false
-        ),
-        Preset(
-            id = "test-30s-30s-30s",
-            title = "Test 30s-30s-30s",
-            introSec = 30, // 30 seconds
-            mainSec = 30, // 30 seconds
-            outroSec = 30, // 30 seconds
-            allowSkip = true,
-            soundEnabled = false
         )
+//        Preset(
+//            id = "test-30s-30s-30s",
+//            title = "Test 30s-30s-30s",
+//            introSec = 30, // 30 seconds
+//            mainSec = 30, // 30 seconds
+//            outroSec = 30, // 30 seconds
+//            allowSkip = true,
+//            soundEnabled = false
+//        )
     )
 }
