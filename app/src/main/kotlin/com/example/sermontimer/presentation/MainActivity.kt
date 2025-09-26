@@ -51,7 +51,10 @@ class MainActivity : ComponentActivity() {
     ) { /* No-op: service gracefully degrades when permission denied */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        installSplashScreen().setKeepOnScreenCondition {
+            // Keep splash screen until data is loaded
+            !timerViewModel.isDataLoaded.value
+        }
         super.onCreate(savedInstanceState)
 
         setTheme(android.R.style.Theme_DeviceDefault)

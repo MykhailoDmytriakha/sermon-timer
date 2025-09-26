@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class TimerViewModel(application: Application) : AndroidViewModel(application) {
@@ -37,25 +38,41 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _ambientState = MutableStateFlow(AmbientUiState())
     val ambientState: StateFlow<AmbientUiState> = _ambientState.asStateFlow()
 
+    private val _isDataLoaded = MutableStateFlow(false)
+    val isDataLoaded: StateFlow<Boolean> = _isDataLoaded.asStateFlow()
+
+    private var lastObservedRunStatus: RunStatus = RunStatus.IDLE
+
     init {
-        loadData()
-        observeTimerState()
+        // Delay data loading to allow splash screen to show and UI to initialize
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(100) // Small delay to allow splash screen
+            loadData()
+            observeTimerState()
+            // Initialize defaults if needed after data is loaded
+            initializeDefaultsIfNeeded()
+        }
     }
 
     private fun loadData() {
         viewModelScope.launch {
             // Load presets
-            dataRepository.presets.collect { presets ->
-                updatePresetsSorted(presets, _defaultPresetId.value)
-            }
+            dataRepository.presets
+                .distinctUntilChanged()
+                .collect { presets ->
+                    updatePresetsSorted(presets, _defaultPresetId.value)
+                }
         }
 
         viewModelScope.launch {
             // Load default preset
-            dataRepository.defaultPresetId.collect { defaultId ->
-                _defaultPresetId.value = defaultId
-                updatePresetsSorted(_presets.value, defaultId)
-            }
+            dataRepository.defaultPresetId
+                .distinctUntilChanged()
+                .collect { defaultId ->
+                    _defaultPresetId.value = defaultId
+                    updatePresetsSorted(_presets.value, defaultId)
+                    _isDataLoaded.value = true // Mark data as loaded
+                }
         }
     }
 
@@ -75,25 +92,29 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             // For now, we'll load from DataStore. In a full implementation,
             // this would observe the service state via a bound connection
-            dataRepository.lastTimerState.collect { state ->
-                _timerState.value = state
+            dataRepository.lastTimerState
+                .distinctUntilChanged()
+                .collect { state ->
+                    _timerState.value = state
 
-                when (state?.status) {
-                    RunStatus.RUNNING, RunStatus.PAUSED, RunStatus.DONE -> {
-                        if (_currentScreen.value != Screen.PresetEditor) {
-                            _currentScreen.value = Screen.Timer
+                    val currentStatus = state?.status ?: RunStatus.IDLE
+                    if (currentStatus != lastObservedRunStatus) {
+                        when (currentStatus) {
+                            RunStatus.RUNNING, RunStatus.PAUSED, RunStatus.DONE -> {
+                                if (_currentScreen.value != Screen.PresetEditor) {
+                                    _currentScreen.value = Screen.Timer
+                                }
+                            }
+
+                            RunStatus.IDLE -> {
+                                if (_currentScreen.value == Screen.Timer) {
+                                    _currentScreen.value = Screen.PresetList
+                                }
+                            }
                         }
+                        lastObservedRunStatus = currentStatus
                     }
-
-                    RunStatus.IDLE -> {
-                        if (_currentScreen.value == Screen.Timer) {
-                            _currentScreen.value = Screen.PresetList
-                        }
-                    }
-
-                    null -> Unit
                 }
-            }
         }
     }
 
@@ -178,6 +199,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             dataRepository.setDefaultPresetId(presetId)
         }
+    }
+
+    private suspend fun initializeDefaultsIfNeeded() {
+        // Import the provider function
+        com.example.sermontimer.data.TimerDataProvider.initializeDefaultsIfNeeded()
     }
 
     enum class Screen {

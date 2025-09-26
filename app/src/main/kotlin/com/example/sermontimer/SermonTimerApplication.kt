@@ -8,15 +8,15 @@ import kotlinx.coroutines.launch
 
 class SermonTimerApplication : Application() {
 
-    private val applicationScope = CoroutineScope(Dispatchers.Default)
-
     override fun onCreate() {
         super.onCreate()
+        // Initialize TimerDataProvider synchronously to ensure it's ready when ViewModel is created
         TimerDataProvider.initialize(this)
 
-        // Initialize default presets if needed
-        applicationScope.launch {
-            TimerDataProvider.initializeDefaultsIfNeeded()
-        }
+        // Initialize default presets asynchronously - this can happen later
+        // Commenting out to avoid blocking startup
+        // CoroutineScope(Dispatchers.Default).launch {
+        //     TimerDataProvider.initializeDefaultsIfNeeded()
+        // }
     }
 }

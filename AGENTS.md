@@ -45,6 +45,7 @@ app/
 * Движок: общий обратный отсчёт + **checkpoints** на трёх границах.
 * Надёжность: работа внутри **ForegroundService**; границы — через exact‑alarms **или** коррекцию по `elapsedRealtime()`.
 * Tile: имя пресета, фаза (I/M/O), кольцевой прогресс; апдейты → TileUpdateRequester.
+  Обновления коалесцируются: только на boundary/pause/resume/stop (не каждую секунду).
 * Уведомление: постоянно, действия Pause/Resume/Skip/Stop.
 * Состояние: `DataStore` хранит `TimerState` + выбранный пресет для восстановления.
 
@@ -217,7 +218,7 @@ DONE
 * Предпочтительно exact‑alarms на границах (если разрешено политикой и реально улучшают точность); иначе — тики 1–2 с + коррекция по `elapsedRealtime()`.
 * Обратный отсчёт T−10 с выключенным экраном: `AlarmManager.setExactAndAllowWhileIdle()` с PendingIntent (`USE_EXACT_ALARM` на API 33+, `SCHEDULE_EXACT_ALARM` c `maxSdkVersion=32` для Wear OS 3.x). При отсутствии доступа сервис логирует предупреждение и возвращается к тик-движку (возможна задержка до 1–2 с в Doze).
 * Хаптика в фоне: все вибрации сервиса используют `VibrationAttributes` (`USAGE_ALARM` для обратного отсчёта, `USAGE_NOTIFICATION` для фазовых сигналов), иначе система может заглушить импульсы при выключенном экране/Doze.
-* Не удерживать экран; не держать ручных wakelock’ов; полагаться на ForegroundService.
+* Не удерживать экран; не держать ручных wakelock’ов; полагаться на ForegroundService. Countdown‑хаптика воспроизводится без wakelock с `VibrationAttributes.USAGE_ALARM`.
 
 ---
 

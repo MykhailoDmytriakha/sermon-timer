@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 class PresetInitializer(private val repository: TimerDataRepository) {
 
     suspend fun initializeDefaults() {
+        // Check if presets exist without blocking on first() if possible
         val existingPresets = repository.presets.first()
         if (existingPresets.isEmpty()) {
             val defaultPresets = createDefaultPresets()

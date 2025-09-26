@@ -209,7 +209,7 @@ fun PresetListItem(
                     shape = RoundedCornerShape(22.dp), // Perfect circle for familiarity
                     colors = ButtonDefaults.buttonColors(
                         backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
-                        contentColor = MaterialTheme.colors.secondary,
+                        contentColor = MaterialTheme.colors.secondary ,
                         disabledBackgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
                         disabledContentColor = MaterialTheme.colors.primary
                     )

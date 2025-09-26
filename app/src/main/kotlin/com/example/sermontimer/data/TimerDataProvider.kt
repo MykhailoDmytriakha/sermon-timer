@@ -9,24 +9,28 @@ import com.example.sermontimer.tile.WearTileUpdateDispatcher
  * Simple singleton provider for dependency injection.
  */
 object TimerDataProvider {
-    private lateinit var repository: TimerDataRepository
-    private lateinit var initializer: PresetInitializer
+    private var repository: TimerDataRepository? = null
+    private var initializer: PresetInitializer? = null
 
     fun initialize(
         context: Context,
         tileUpdateDispatcher: TileUpdateDispatcher = WearTileUpdateDispatcher(context)
     ) {
         repository = DataStoreTimerRepository(context, tileUpdateDispatcher)
-        initializer = PresetInitializer(repository)
+        initializer = PresetInitializer(repository!!)
     }
 
     fun getRepository(): TimerDataRepository {
-        check(::repository.isInitialized) { "TimerDataProvider must be initialized first" }
-        return repository
+        if (repository == null) {
+            throw IllegalStateException("TimerDataProvider must be initialized first")
+        }
+        return repository!!
     }
 
     suspend fun initializeDefaultsIfNeeded() {
-        check(::initializer.isInitialized) { "TimerDataProvider must be initialized first" }
-        initializer.initializeDefaults()
+        if (initializer == null) {
+            throw IllegalStateException("TimerDataProvider must be initialized first")
+        }
+        initializer!!.initializeDefaults()
     }
 }

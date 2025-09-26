@@ -8,10 +8,16 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.TimerState
 import com.example.sermontimer.tile.TileUpdateDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.IOException
@@ -31,6 +37,8 @@ class DataStoreTimerRepository(
     private val tileUpdateDispatcher: TileUpdateDispatcher,
     private val json: Json = Json { encodeDefaults = false }
 ) : TimerDataRepository {
+
+    private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override val presets: Flow<List<Preset>> = context.dataStore.data
         .catch { exception ->
@@ -53,6 +61,11 @@ class DataStoreTimerRepository(
                 }
             }
         }
+        .stateIn(
+            scope = repositoryScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     override val defaultPresetId: Flow<String?> = context.dataStore.data
         .catch { exception ->
@@ -65,6 +78,11 @@ class DataStoreTimerRepository(
         .map { preferences ->
             preferences[PreferencesKeys.DEFAULT_PRESET_ID]
         }
+        .stateIn(
+            scope = repositoryScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
 
     override val lastTimerState: Flow<TimerState?> = context.dataStore.data
         .catch { exception ->
@@ -87,6 +105,11 @@ class DataStoreTimerRepository(
                 }
             }
         }
+        .stateIn(
+            scope = repositoryScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
 
     override suspend fun savePresets(presets: List<Preset>) {
         val presetsJson = json.encodeToString(presets)

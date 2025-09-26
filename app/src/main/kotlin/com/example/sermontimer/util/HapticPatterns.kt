@@ -1,12 +1,12 @@
 package com.example.sermontimer.util
 
 import android.content.Context
-import android.os.PowerManager
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.content.getSystemService
+import android.util.Log
 import com.example.sermontimer.domain.model.Segment
 
 /**
@@ -22,13 +22,6 @@ class HapticPatterns(private val context: Context) {
         } else {
             @Suppress("DEPRECATION")
             context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-    }
-
-    private val wakeLock: PowerManager.WakeLock by lazy {
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SermonTimer::CountdownVibration").apply {
-            setReferenceCounted(false)
         }
     }
 
@@ -72,20 +65,19 @@ class HapticPatterns(private val context: Context) {
      */
     fun startCountdownVibration(remainingSeconds: Int) {
         if (!vibrator.hasVibrator() || remainingSeconds !in 1..10) {
-            android.util.Log.d("HAPTIC", "startCountdownVibration: skipped - hasVibrator=${vibrator.hasVibrator()}, remainingSeconds=$remainingSeconds")
+            if (Log.isLoggable("HAPTIC", Log.DEBUG)) {
+                Log.d("HAPTIC", "startCountdownVibration: skipped - hasVibrator=${vibrator.hasVibrator()}, remainingSeconds=$remainingSeconds")
+            }
             return
         }
-        // Stop any ongoing effect and (re)acquire a short wakelock while starting the waveform
+        // Stop any ongoing effect
         stopCountdownVibration()
-        val holdMs = (remainingSeconds * 1000L) + 1000L
-        if (!wakeLock.isHeld) {
-            android.util.Log.d("HAPTIC", "WAKELOCK: acquiring wake lock for ~${holdMs}ms")
-            wakeLock.acquire(holdMs)
-        }
 
         val (timings, amplitudes) = buildCountdownWaveform(remainingSeconds)
         val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
-        android.util.Log.d("HAPTIC", "VIBRATION: starting countdown waveform with ${remainingSeconds} pulses")
+        if (Log.isLoggable("HAPTIC", Log.DEBUG)) {
+            Log.d("HAPTIC", "VIBRATION: starting countdown waveform with ${remainingSeconds} pulses")
+        }
         vibrator.vibrate(effect, alarmAttributes)
     }
 
@@ -93,15 +85,11 @@ class HapticPatterns(private val context: Context) {
      * Stops the continuous countdown vibration.
      */
     fun stopCountdownVibration() {
-        android.util.Log.d("HAPTIC", "stopCountdownVibration: stopping countdown vibration")
+        if (Log.isLoggable("HAPTIC", Log.DEBUG)) {
+            Log.d("HAPTIC", "stopCountdownVibration: stopping countdown vibration")
+        }
         // Cancel any ongoing vibration
         vibrator.cancel()
-
-        // Release wake lock if held
-        if (wakeLock.isHeld) {
-            android.util.Log.d("HAPTIC", "WAKELOCK: releasing wake lock")
-            wakeLock.release()
-        }
     }
 
     companion object {

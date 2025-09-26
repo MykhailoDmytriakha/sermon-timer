@@ -13,6 +13,7 @@ import android.os.IBinder
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.app.ServiceCompat
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
 import androidx.wear.tiles.TileService
@@ -161,11 +162,9 @@ class TimerService : Service() {
         val initialState = TimerState.idle(SegmentDurations(0, 0, 0))
         val notification = createNotification(initialState)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // API 34+
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, fgsType)
 
         when (intent?.action) {
             ACTION_START -> {
@@ -247,6 +246,8 @@ class TimerService : Service() {
         if (preset != null) {
             val startCommand = TimerCommand.Start(preset, timeProvider.elapsedRealtimeMillis())
             engine.submit(startCommand)
+            // Reflect start on the tile once; avoid per-second updates
+            try { tileUpdateRequester.requestUpdate(SermonTileService::class.java) } catch (_: Exception) {}
         }
     }
 
@@ -256,12 +257,6 @@ class TimerService : Service() {
                 lastKnownState = state
                 updateNotification(state)
                 saveStateToDataStore(state)
-                try {
-                    tileUpdateRequester.requestUpdate(SermonTileService::class.java)
-                } catch (e: Exception) {
-                    // Tile update failed, but don't crash the service
-                    android.util.Log.w("TIMER", "Tile update failed", e)
-                }
 
                 // Start/stop timer job based on state
                 if (state.isActive && timerJob?.isActive != true) {
@@ -379,7 +374,9 @@ class TimerService : Service() {
             while (isActive) {
                 delay(1.seconds)
                 val currentTime = timeProvider.elapsedRealtimeMillis()
-                android.util.Log.d("TIMER", "TICK: submitting Tick command at time=$currentTime")
+                if (android.util.Log.isLoggable("TIMER", android.util.Log.DEBUG)) {
+                    android.util.Log.d("TIMER", "TICK: submitting Tick command at time=$currentTime")
+                }
                 engine.submit(TimerCommand.Tick(currentTime))
             }
         }
@@ -636,6 +633,8 @@ class TimerService : Service() {
         resetCountdownScheduling()
         // Play haptic pattern for segment boundary according to AGENTS.md §10
         hapticPatterns.playBoundaryPattern(event.nextSegment)
+        // Boundary reached impacts tile-relevant state; request a refresh
+        try { tileUpdateRequester.requestUpdate(SermonTileService::class.java) } catch (_: Exception) {}
     }
 
     private fun handleTimerCompleted() {
@@ -645,6 +644,7 @@ class TimerService : Service() {
         resetCountdownScheduling()
         // Play completion haptic pattern according to AGENTS.md §10
         hapticPatterns.playCompletionPattern()
+        try { tileUpdateRequester.requestUpdate(SermonTileService::class.java) } catch (_: Exception) {}
     }
 
     private fun handleTimerPaused() {
@@ -653,12 +653,14 @@ class TimerService : Service() {
         hapticPatterns.stopCountdownVibration()
         resetCountdownScheduling()
         // TODO: Add pause feedback if needed
+        try { tileUpdateRequester.requestUpdate(SermonTileService::class.java) } catch (_: Exception) {}
     }
 
     private fun handleTimerResumed() {
         android.util.Log.d("TIMER", "EVENT: TimerResumed")
         // Countdown vibration will restart automatically in observeTimerState if in countdown phase
         // TODO: Add resume feedback if needed
+        try { tileUpdateRequester.requestUpdate(SermonTileService::class.java) } catch (_: Exception) {}
     }
 
     private fun handleTimerStopped() {
@@ -667,5 +669,6 @@ class TimerService : Service() {
         hapticPatterns.stopCountdownVibration()
         resetCountdownScheduling()
         // TODO: Add stop feedback if needed
+        try { tileUpdateRequester.requestUpdate(SermonTileService::class.java) } catch (_: Exception) {}
     }
 }
