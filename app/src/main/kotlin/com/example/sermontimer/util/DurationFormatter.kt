@@ -59,7 +59,11 @@ object DurationFormatter {
      * Example: "5:00 → 20:00 → 5:00"
      */
     fun formatPresetDurations(introSec: Int, mainSec: Int, outroSec: Int): String {
-        return "${formatDurationCompact(introSec)} → ${formatDurationCompact(mainSec)} → ${formatDurationCompact(outroSec)}"
+        return "${formatDurationCompact(introSec)} → ${formatDurationCompact(mainSec)} → ${
+            formatDurationCompact(
+                outroSec
+            )
+        }"
     }
 
     /**

@@ -91,7 +91,8 @@ class DurationFormatterTest {
 
     @Test
     fun `formatTimerDisplay handles large durations`() {
-        val result = DurationFormatter.formatTimerDisplay(7265) // 121:05 (2 hours, 1 minute, 5 seconds)
+        val result =
+            DurationFormatter.formatTimerDisplay(7265) // 121:05 (2 hours, 1 minute, 5 seconds)
         assertThat(result).isEqualTo("121:05")
     }
 }

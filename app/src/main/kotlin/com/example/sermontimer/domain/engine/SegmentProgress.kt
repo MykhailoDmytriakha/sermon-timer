@@ -20,6 +20,7 @@ internal fun SegmentDurations.progressForElapsed(elapsedSec: Int): SegmentProgre
             elapsedInSegmentSec = elapsedSec,
             remainingInSegmentSec = introBoundary - elapsedSec,
         )
+
         elapsedSec < mainBoundary -> {
             val elapsedInMain = elapsedSec - introBoundary
             SegmentProgress(
@@ -28,6 +29,7 @@ internal fun SegmentDurations.progressForElapsed(elapsedSec: Int): SegmentProgre
                 remainingInSegmentSec = mainBoundary - elapsedSec,
             )
         }
+
         elapsedSec < outroBoundary -> {
             val elapsedInOutro = elapsedSec - mainBoundary
             SegmentProgress(
@@ -36,6 +38,7 @@ internal fun SegmentDurations.progressForElapsed(elapsedSec: Int): SegmentProgre
                 remainingInSegmentSec = outroBoundary - elapsedSec,
             )
         }
+
         else -> SegmentProgress(
             segment = Segment.DONE,
             elapsedInSegmentSec = outroSec,

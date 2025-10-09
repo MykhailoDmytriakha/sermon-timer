@@ -34,7 +34,11 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onExitAmbient() {
-            timerViewModel.updateAmbientState(isAmbient = false, isLowBit = false, requiresBurnInProtection = false)
+            timerViewModel.updateAmbientState(
+                isAmbient = false,
+                isLowBit = false,
+                requiresBurnInProtection = false
+            )
         }
 
         override fun onUpdateAmbient() {
@@ -60,7 +64,11 @@ class MainActivity : ComponentActivity() {
         setTheme(android.R.style.Theme_DeviceDefault)
 
         lifecycle.addObserver(ambientObserver)
-        timerViewModel.updateAmbientState(isAmbient = false, isLowBit = false, requiresBurnInProtection = false)
+        timerViewModel.updateAmbientState(
+            isAmbient = false,
+            isLowBit = false,
+            requiresBurnInProtection = false
+        )
         maybeRequestNotificationPermission()
 
         // Handle tile actions from intent
@@ -84,9 +92,11 @@ class MainActivity : ComponentActivity() {
             TimerService.ACTION_PAUSE -> {
                 TimerService.pauseService(this)
             }
+
             TimerService.ACTION_RESUME -> {
                 TimerService.resumeService(this)
             }
+
             "start_default" -> {
                 activityScope.launch {
                     try {
@@ -112,7 +122,11 @@ class MainActivity : ComponentActivity() {
 
     private fun maybeRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        ) return
         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }

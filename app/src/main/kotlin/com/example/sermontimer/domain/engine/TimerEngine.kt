@@ -1,8 +1,8 @@
 package com.example.sermontimer.domain.engine
 
 import com.example.sermontimer.domain.model.TimerState
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Contract for the deterministic timer state machine.

@@ -48,12 +48,14 @@ class TileActionActivity : Activity() {
                     Log.w(logTag, "TileActionActivity could not resolve preset for ACTION_START")
                 }
             }
+
             ACTION_VIEW_PROGRESS -> openMainActivity()
             ACTION_PAUSE -> TimerService.pauseService(applicationContext)
             ACTION_RESUME -> {
                 TimerService.resumeService(applicationContext)
                 openMainActivity()
             }
+
             ACTION_OPEN_APP -> openMainActivity()
             else -> Unit
         }

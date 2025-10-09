@@ -3,7 +3,6 @@ package com.example.sermontimer.presentation
 import com.example.sermontimer.domain.model.Preset
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -16,7 +15,8 @@ class TimerViewModelTest {
         val preset1 = Preset("1", "First Preset", 300, 1200, 300)
         val preset2 = Preset("2", "Second Preset", 180, 900, 180)
         val preset3 = Preset("3", "Third Preset", 120, 600, 120)
-        val unsortedPresets = listOf(preset2, preset1, preset3) // preset2 first, preset1 second, preset3 third
+        val unsortedPresets =
+            listOf(preset2, preset1, preset3) // preset2 first, preset1 second, preset3 third
         val defaultPresetId = "1" // preset1 should be default
 
         // When

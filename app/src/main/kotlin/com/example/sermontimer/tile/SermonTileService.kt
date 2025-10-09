@@ -12,12 +12,10 @@ import androidx.wear.protolayout.ResourceBuilders
 import androidx.wear.protolayout.TimelineBuilders
 import androidx.wear.protolayout.material.ChipColors
 import androidx.wear.protolayout.material.ChipDefaults
-import androidx.wear.protolayout.material.CircularProgressIndicator
 import androidx.wear.protolayout.material.Colors
 import androidx.wear.protolayout.material.CompactChip
 import androidx.wear.protolayout.material.Text
 import androidx.wear.protolayout.material.Typography
-import androidx.wear.protolayout.material.layouts.EdgeContentLayout
 import androidx.wear.protolayout.material.layouts.PrimaryLayout
 import androidx.wear.tiles.RequestBuilders
 import androidx.wear.tiles.TileBuilders
@@ -34,7 +32,6 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlin.math.roundToInt
 
 private const val TILE_RESOURCES_VERSION = "4"
 private const val TILE_CLICKABLE_ID = "tile-primary"
@@ -144,7 +141,8 @@ class SermonTileService : TileService() {
         preset: DefaultPresetSnapshot
     ): LayoutElementBuilders.LayoutElement {
         // Create a linear progress bar showing preset structure with colored segments
-        val segmentSpecs = computeLinearSegmentSpecs(listOf(preset.introSec, preset.mainSec, preset.outroSec))
+        val segmentSpecs =
+            computeLinearSegmentSpecs(listOf(preset.introSec, preset.mainSec, preset.outroSec))
 
         return LayoutElementBuilders.Column.Builder()
             .setWidth(DimensionBuilders.expand())
@@ -181,9 +179,9 @@ class SermonTileService : TileService() {
                     .setModifiers(
                         ModifiersBuilders.Modifiers.Builder()
                             .setBackground(
-                        ModifiersBuilders.Background.Builder()
-                            .setColor(ColorBuilders.argb(Color.parseColor("#1A1A1A"))) // Dark background
-                            .build()
+                                ModifiersBuilders.Background.Builder()
+                                    .setColor(ColorBuilders.argb(Color.parseColor("#1A1A1A"))) // Dark background
+                                    .build()
                             )
                             .build()
                     )
@@ -202,9 +200,15 @@ class SermonTileService : TileService() {
                                             .setModifiers(
                                                 ModifiersBuilders.Modifiers.Builder()
                                                     .setBackground(
-                                                ModifiersBuilders.Background.Builder()
-                                                    .setColor(ColorBuilders.argb(snapshotColors.colorForSegment(spec.segmentIndex)))
-                                                    .build()
+                                                        ModifiersBuilders.Background.Builder()
+                                                            .setColor(
+                                                                ColorBuilders.argb(
+                                                                    snapshotColors.colorForSegment(
+                                                                        spec.segmentIndex
+                                                                    )
+                                                                )
+                                                            )
+                                                            .build()
                                                     )
                                                     .build()
                                             )
@@ -259,13 +263,17 @@ class SermonTileService : TileService() {
     }
 
 
-
-
-    private fun createActionClickable(action: TileButtonAction, presetId: String?): ModifiersBuilders.Clickable {
+    private fun createActionClickable(
+        action: TileButtonAction,
+        presetId: String?
+    ): ModifiersBuilders.Clickable {
         val androidActivity = ActionBuilders.AndroidActivity.Builder()
             .setPackageName(packageName)
             .setClassName(TileActionActivity::class.java.name)
-            .addKeyToExtraMapping(TileActionActivity.EXTRA_TILE_ACTION, ActionBuilders.AndroidStringExtra.Builder().setValue(action.intentAction).build())
+            .addKeyToExtraMapping(
+                TileActionActivity.EXTRA_TILE_ACTION,
+                ActionBuilders.AndroidStringExtra.Builder().setValue(action.intentAction).build()
+            )
             .apply {
                 if (!presetId.isNullOrBlank()) {
                     addKeyToExtraMapping(
@@ -325,6 +333,7 @@ class SermonTileService : TileService() {
                 targetPresetId = null
                 chipColors = snapshotColors.secondaryChip
             }
+
             RunStatus.PAUSED -> {
                 buttonAction = TileButtonAction.RESUME
                 buttonText = getString(R.string.action_resume)
@@ -332,6 +341,7 @@ class SermonTileService : TileService() {
                 targetPresetId = null
                 chipColors = snapshotColors.primaryChip
             }
+
             RunStatus.DONE -> {
                 if (!restartPresetId.isNullOrBlank()) {
                     buttonAction = TileButtonAction.START
@@ -347,6 +357,7 @@ class SermonTileService : TileService() {
                     chipColors = snapshotColors.secondaryChip
                 }
             }
+
             RunStatus.IDLE -> {
                 if (!restartPresetId.isNullOrBlank()) {
                     buttonAction = TileButtonAction.START

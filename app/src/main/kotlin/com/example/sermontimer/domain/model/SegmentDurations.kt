@@ -37,6 +37,7 @@ data class SegmentDurations(
             outroSec > 0 -> Segment.OUTRO
             else -> Segment.DONE
         }
+
         Segment.MAIN -> if (outroSec > 0) Segment.OUTRO else Segment.DONE
         Segment.OUTRO, Segment.DONE -> Segment.DONE
     }

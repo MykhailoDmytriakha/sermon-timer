@@ -75,12 +75,18 @@ class CountdownAlarmScheduler(
         onTrigger(boundaryAtElapsedMs)
     }
 
-    private fun attemptExactWhileIdle(triggerAtElapsedMs: Long, boundaryAtElapsedMs: Long): Boolean {
+    private fun attemptExactWhileIdle(
+        triggerAtElapsedMs: Long,
+        boundaryAtElapsedMs: Long
+    ): Boolean {
         if (!shouldUsePendingIntent()) {
             return false
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            Log.w("TIMER", "COUNTDOWN: exact alarm permission not granted; falling back to setExact")
+            Log.w(
+                "TIMER",
+                "COUNTDOWN: exact alarm permission not granted; falling back to setExact"
+            )
             onExactAlarmAccessMissing?.invoke()
             return false
         }
@@ -102,7 +108,11 @@ class CountdownAlarmScheduler(
             onExactAlarmAccessRestored?.invoke()
             true
         } catch (security: SecurityException) {
-            Log.w("TIMER", "COUNTDOWN: SecurityException scheduling exact alarm; falling back", security)
+            Log.w(
+                "TIMER",
+                "COUNTDOWN: SecurityException scheduling exact alarm; falling back",
+                security
+            )
             pendingIntent = null
             onExactAlarmAccessMissing?.invoke()
             false

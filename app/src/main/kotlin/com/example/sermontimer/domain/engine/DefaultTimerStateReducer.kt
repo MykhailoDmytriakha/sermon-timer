@@ -2,15 +2,18 @@ package com.example.sermontimer.domain.engine
 
 import com.example.sermontimer.domain.model.RunStatus
 import com.example.sermontimer.domain.model.Segment
-import com.example.sermontimer.domain.model.TimerState
 import com.example.sermontimer.domain.model.SegmentDurations
+import com.example.sermontimer.domain.model.TimerState
 import com.example.sermontimer.domain.model.toActivePresetMeta
 import kotlin.math.max
 import kotlin.math.min
 
 class DefaultTimerStateReducer : TimerStateReducer {
 
-    override fun reduce(current: TimerState, command: TimerCommand): TimerStateReducer.ReductionResult = when (command) {
+    override fun reduce(
+        current: TimerState,
+        command: TimerCommand
+    ): TimerStateReducer.ReductionResult = when (command) {
         is TimerCommand.Start -> handleStart(current, command)
         is TimerCommand.Tick -> handleTick(current, command)
         is TimerCommand.Pause -> handlePause(current, command)
@@ -21,7 +24,10 @@ class DefaultTimerStateReducer : TimerStateReducer {
         is TimerCommand.Cancel -> TimerStateReducer.ReductionResult(current)
     }
 
-    private fun handleStart(current: TimerState, command: TimerCommand.Start): TimerStateReducer.ReductionResult {
+    private fun handleStart(
+        current: TimerState,
+        command: TimerCommand.Start
+    ): TimerStateReducer.ReductionResult {
         if (current.status == RunStatus.RUNNING) {
             return TimerStateReducer.ReductionResult(current)
         }
@@ -41,12 +47,16 @@ class DefaultTimerStateReducer : TimerStateReducer {
         return TimerStateReducer.ReductionResult(newState, events)
     }
 
-    private fun handleTick(current: TimerState, command: TimerCommand.Tick): TimerStateReducer.ReductionResult {
+    private fun handleTick(
+        current: TimerState,
+        command: TimerCommand.Tick
+    ): TimerStateReducer.ReductionResult {
         if (current.status != RunStatus.RUNNING || current.startedAtElapsedRealtime == null) {
             return TimerStateReducer.ReductionResult(current)
         }
         val totalSec = current.durations.totalSec
-        val elapsedSinceBaselineSec = secondsBetween(current.startedAtElapsedRealtime, command.monotonicNowMs)
+        val elapsedSinceBaselineSec =
+            secondsBetween(current.startedAtElapsedRealtime, command.monotonicNowMs)
         val newElapsed = min(totalSec, elapsedSinceBaselineSec)
         if (newElapsed <= current.elapsedTotalSec) {
             return TimerStateReducer.ReductionResult(current)
@@ -54,12 +64,16 @@ class DefaultTimerStateReducer : TimerStateReducer {
         return updateProgress(current, newElapsed)
     }
 
-    private fun handlePause(current: TimerState, command: TimerCommand.Pause): TimerStateReducer.ReductionResult {
+    private fun handlePause(
+        current: TimerState,
+        command: TimerCommand.Pause
+    ): TimerStateReducer.ReductionResult {
         if (current.status != RunStatus.RUNNING || current.startedAtElapsedRealtime == null) {
             return TimerStateReducer.ReductionResult(current)
         }
         val totalSec = current.durations.totalSec
-        val elapsedSinceBaseline = secondsBetween(current.startedAtElapsedRealtime, command.monotonicNowMs)
+        val elapsedSinceBaseline =
+            secondsBetween(current.startedAtElapsedRealtime, command.monotonicNowMs)
         val newElapsed = min(totalSec, elapsedSinceBaseline)
         val (updatedState, events) = updateProgress(current, newElapsed)
         val pausedState = updatedState.copy(
@@ -70,20 +84,29 @@ class DefaultTimerStateReducer : TimerStateReducer {
         return TimerStateReducer.ReductionResult(pausedState, events + pauseEvent)
     }
 
-    private fun handleResume(current: TimerState, command: TimerCommand.Resume): TimerStateReducer.ReductionResult {
+    private fun handleResume(
+        current: TimerState,
+        command: TimerCommand.Resume
+    ): TimerStateReducer.ReductionResult {
         if (current.status != RunStatus.PAUSED) {
             return TimerStateReducer.ReductionResult(current)
         }
         val resumedState = current.copy(
             status = RunStatus.RUNNING,
-            startedAtElapsedRealtime = adjustBaseline(command.monotonicResumeMs, current.elapsedTotalSec),
+            startedAtElapsedRealtime = adjustBaseline(
+                command.monotonicResumeMs,
+                current.elapsedTotalSec
+            ),
         )
         val events = mutableListOf<TimerEvent>(TimerEvent.Resumed(resumedState.segment))
         val advancedState = advancePastZeroSegments(resumedState, events)
         return TimerStateReducer.ReductionResult(advancedState, events)
     }
 
-    private fun handleSkip(current: TimerState, command: TimerCommand.SkipSegment): TimerStateReducer.ReductionResult {
+    private fun handleSkip(
+        current: TimerState,
+        command: TimerCommand.SkipSegment
+    ): TimerStateReducer.ReductionResult {
         val activePreset = current.activePreset ?: return TimerStateReducer.ReductionResult(current)
         if (!activePreset.allowSkip || current.status != RunStatus.RUNNING) {
             return if (!activePreset.allowSkip) {
@@ -123,7 +146,10 @@ class DefaultTimerStateReducer : TimerStateReducer {
         if (current.status != RunStatus.RUNNING) {
             return TimerStateReducer.ReductionResult(current)
         }
-        val newElapsed = min(current.durations.totalSec, current.durations.cumulativeBoundaryFor(command.segment))
+        val newElapsed = min(
+            current.durations.totalSec,
+            current.durations.cumulativeBoundaryFor(command.segment)
+        )
         val adjusted = current.copy(
             elapsedTotalSec = max(current.elapsedTotalSec, newElapsed),
             startedAtElapsedRealtime = adjustBaseline(command.atMonotonicMs, newElapsed),

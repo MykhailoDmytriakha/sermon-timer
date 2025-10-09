@@ -5,8 +5,8 @@ import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import androidx.core.content.getSystemService
 import android.util.Log
+import androidx.core.content.getSystemService
 import com.example.sermontimer.domain.model.Segment
 
 /**
@@ -17,7 +17,8 @@ class HapticPatterns(private val context: Context) {
 
     private val vibrator: Vibrator by lazy {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            val vibratorManager =
+                context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
             vibratorManager?.defaultVibrator ?: context.getSystemService<Vibrator>()!!
         } else {
             @Suppress("DEPRECATION")
@@ -54,7 +55,11 @@ class HapticPatterns(private val context: Context) {
     fun playCompletionPattern() {
         if (!vibrator.hasVibrator()) return
 
-        val effect = VibrationEffect.createWaveform(LONG_SHORT_LONG_PATTERN.first, LONG_SHORT_LONG_PATTERN.second, -1)
+        val effect = VibrationEffect.createWaveform(
+            LONG_SHORT_LONG_PATTERN.first,
+            LONG_SHORT_LONG_PATTERN.second,
+            -1
+        )
         vibrator.vibrate(effect, feedbackAttributes)
     }
 
@@ -66,7 +71,10 @@ class HapticPatterns(private val context: Context) {
     fun startCountdownVibration(remainingSeconds: Int) {
         if (!vibrator.hasVibrator() || remainingSeconds !in 1..10) {
             if (Log.isLoggable("HAPTIC", Log.DEBUG)) {
-                Log.d("HAPTIC", "startCountdownVibration: skipped - hasVibrator=${vibrator.hasVibrator()}, remainingSeconds=$remainingSeconds")
+                Log.d(
+                    "HAPTIC",
+                    "startCountdownVibration: skipped - hasVibrator=${vibrator.hasVibrator()}, remainingSeconds=$remainingSeconds"
+                )
             }
             return
         }
@@ -76,7 +84,10 @@ class HapticPatterns(private val context: Context) {
         val (timings, amplitudes) = buildCountdownWaveform(remainingSeconds)
         val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
         if (Log.isLoggable("HAPTIC", Log.DEBUG)) {
-            Log.d("HAPTIC", "VIBRATION: starting countdown waveform with ${remainingSeconds} pulses")
+            Log.d(
+                "HAPTIC",
+                "VIBRATION: starting countdown waveform with ${remainingSeconds} pulses"
+            )
         }
         vibrator.vibrate(effect, alarmAttributes)
     }
@@ -105,13 +116,27 @@ class HapticPatterns(private val context: Context) {
 
         // Triple longer: three longer vibrations
         private val TRIPLE_LONG_PATTERN = Pair(
-            longArrayOf(0, 200, 100, 200, 100, 200), // wait 0ms, vibrate 200ms, wait 100ms, vibrate 200ms, wait 100ms, vibrate 200ms
+            longArrayOf(
+                0,
+                200,
+                100,
+                200,
+                100,
+                200
+            ), // wait 0ms, vibrate 200ms, wait 100ms, vibrate 200ms, wait 100ms, vibrate 200ms
             intArrayOf(0, 200, 0, 200, 0, 200)       // amplitude for each segment
         )
 
         // Long-short-long: final completion pattern
         private val LONG_SHORT_LONG_PATTERN = Pair(
-            longArrayOf(0, 300, 150, 150, 150, 300), // wait 0ms, vibrate 300ms, wait 150ms, vibrate 150ms, wait 150ms, vibrate 300ms
+            longArrayOf(
+                0,
+                300,
+                150,
+                150,
+                150,
+                300
+            ), // wait 0ms, vibrate 300ms, wait 150ms, vibrate 150ms, wait 150ms, vibrate 300ms
             intArrayOf(0, 255, 0, 180, 0, 255)       // amplitude for each segment
         )
 
@@ -126,7 +151,7 @@ class HapticPatterns(private val context: Context) {
             var idx = 1
             repeat(pulses) {
                 timings[idx] = 500L; amplitudes[idx] = 200; idx++  // on
-                timings[idx] = 500L; amplitudes[idx] = 0;   idx++  // off
+                timings[idx] = 500L; amplitudes[idx] = 0; idx++  // off
             }
             return Pair(timings, amplitudes)
         }

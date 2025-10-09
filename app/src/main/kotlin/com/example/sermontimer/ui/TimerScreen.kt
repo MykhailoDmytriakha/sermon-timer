@@ -1,7 +1,13 @@
 package com.example.sermontimer.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -14,7 +20,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Icon
@@ -62,121 +67,145 @@ fun TimerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-        // Segment indicator
-        Text(
-            text = when (timerState.segment) {
-                Segment.INTRO -> stringResource(R.string.segment_intro)
-                Segment.MAIN -> stringResource(R.string.segment_main)
-                Segment.OUTRO -> stringResource(R.string.segment_outro)
-                Segment.DONE -> stringResource(R.string.timer_done)
-            },
-            style = MaterialTheme.typography.caption1,
-            color = Color.White,
-            textAlign = TextAlign.Center
-        )
+            // Segment indicator
+            Text(
+                text = when (timerState.segment) {
+                    Segment.INTRO -> stringResource(R.string.segment_intro)
+                    Segment.MAIN -> stringResource(R.string.segment_main)
+                    Segment.OUTRO -> stringResource(R.string.segment_outro)
+                    Segment.DONE -> stringResource(R.string.timer_done)
+                },
+                style = MaterialTheme.typography.caption1,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        // Large timer display
-        Text(
-            text = DurationFormatter.formatTimerDisplay(timerState.remainingInSegmentSec),
-            style = MaterialTheme.typography.display1,
-            color = Color.White,
-            textAlign = TextAlign.Center
-        )
+            // Large timer display
+            Text(
+                text = DurationFormatter.formatTimerDisplay(timerState.remainingInSegmentSec),
+                style = MaterialTheme.typography.display1,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // Action buttons
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            when (timerState.status) {
-                RunStatus.RUNNING -> {
-                    Button(
-                        onClick = onPause,
-                        colors = ButtonDefaults.buttonColors(backgroundColor = Color.White.copy(alpha = 0.2f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Pause,
-                            contentDescription = stringResource(R.string.action_pause),
-                            tint = Color.White
-                        )
-                    }
-
-                    if (timerState.activePreset?.allowSkip == true) {
+            // Action buttons
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                when (timerState.status) {
+                    RunStatus.RUNNING -> {
                         Button(
-                            onClick = onSkip,
-                            colors = ButtonDefaults.buttonColors(backgroundColor = Color.White.copy(alpha = 0.2f))
+                            onClick = onPause,
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color.White.copy(
+                                    alpha = 0.2f
+                                )
+                            )
                         ) {
-                            Text(
-                                text = stringResource(R.string.action_skip),
-                                color = Color.White
+                            Icon(
+                                imageVector = Icons.Filled.Pause,
+                                contentDescription = stringResource(R.string.action_pause),
+                                tint = Color.White
+                            )
+                        }
+
+                        if (timerState.activePreset?.allowSkip == true) {
+                            Button(
+                                onClick = onSkip,
+                                colors = ButtonDefaults.buttonColors(
+                                    backgroundColor = Color.White.copy(
+                                        alpha = 0.2f
+                                    )
+                                )
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.action_skip),
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = onStop,
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color.Red.copy(
+                                    alpha = 0.8f
+                                )
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Stop,
+                                contentDescription = stringResource(R.string.action_stop),
+                                tint = Color.White
                             )
                         }
                     }
 
-                    Button(
-                        onClick = onStop,
-                        colors = ButtonDefaults.buttonColors(backgroundColor = Color.Red.copy(alpha = 0.8f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Stop,
-                            contentDescription = stringResource(R.string.action_stop),
-                            tint = Color.White
+                    RunStatus.PAUSED -> {
+                        Button(
+                            onClick = onResume,
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color.White.copy(
+                                    alpha = 0.2f
+                                )
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = stringResource(R.string.action_resume),
+                                tint = Color.White
+                            )
+                        }
+
+                        Button(
+                            onClick = onStop,
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color.Red.copy(
+                                    alpha = 0.8f
+                                )
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Stop,
+                                contentDescription = stringResource(R.string.action_stop),
+                                tint = Color.White
+                            )
+                        }
+                    }
+
+                    RunStatus.DONE -> {
+                        Button(
+                            onClick = onStop,
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color.White.copy(
+                                    alpha = 0.2f
+                                )
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Stop,
+                                contentDescription = stringResource(R.string.action_stop),
+                                tint = Color.White
+                            )
+                        }
+                    }
+
+                    else -> {
+                        Text(
+                            text = stringResource(R.string.timer_ready),
+                            style = MaterialTheme.typography.body1,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
                         )
                     }
-                }
-
-                RunStatus.PAUSED -> {
-                    Button(
-                        onClick = onResume,
-                        colors = ButtonDefaults.buttonColors(backgroundColor = Color.White.copy(alpha = 0.2f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = stringResource(R.string.action_resume),
-                            tint = Color.White
-                        )
-                    }
-
-                    Button(
-                        onClick = onStop,
-                        colors = ButtonDefaults.buttonColors(backgroundColor = Color.Red.copy(alpha = 0.8f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Stop,
-                            contentDescription = stringResource(R.string.action_stop),
-                            tint = Color.White
-                        )
-                    }
-                }
-
-                RunStatus.DONE -> {
-                    Button(
-                        onClick = onStop,
-                        colors = ButtonDefaults.buttonColors(backgroundColor = Color.White.copy(alpha = 0.2f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Stop,
-                            contentDescription = stringResource(R.string.action_stop),
-                            tint = Color.White
-                        )
-                    }
-                }
-
-                else -> {
-                    Text(
-                        text = stringResource(R.string.timer_ready),
-                        style = MaterialTheme.typography.body1,
-                        color = Color.White,
-                        textAlign = TextAlign.Center
-                    )
                 }
             }
         }
-    }
     }
 }
 
@@ -195,45 +224,45 @@ private fun AmbientTimerLayout(timerState: TimerState, ambientState: AmbientUiSt
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-        val phaseLabel = when (timerState.segment) {
-            Segment.INTRO -> stringResource(R.string.segment_intro)
-            Segment.MAIN -> stringResource(R.string.segment_main)
-            Segment.OUTRO -> stringResource(R.string.segment_outro)
-            Segment.DONE -> stringResource(R.string.timer_done)
+            val phaseLabel = when (timerState.segment) {
+                Segment.INTRO -> stringResource(R.string.segment_intro)
+                Segment.MAIN -> stringResource(R.string.segment_main)
+                Segment.OUTRO -> stringResource(R.string.segment_outro)
+                Segment.DONE -> stringResource(R.string.timer_done)
+            }
+
+            Text(
+                text = phaseLabel,
+                style = MaterialTheme.typography.caption1,
+                color = textColor,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = DurationFormatter.formatTimerDisplay(timerState.remainingInSegmentSec),
+                style = MaterialTheme.typography.display1,
+                color = textColor,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val statusLabel = when (timerState.status) {
+                RunStatus.PAUSED -> stringResource(R.string.action_pause)
+                RunStatus.DONE -> stringResource(R.string.timer_done)
+                RunStatus.RUNNING -> stringResource(R.string.tile_timer_running)
+                else -> stringResource(R.string.timer_ready)
+            }
+
+            Text(
+                text = statusLabel,
+                style = MaterialTheme.typography.caption2,
+                color = supportingColor,
+                textAlign = TextAlign.Center
+            )
         }
-
-        Text(
-            text = phaseLabel,
-            style = MaterialTheme.typography.caption1,
-            color = textColor,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Text(
-            text = DurationFormatter.formatTimerDisplay(timerState.remainingInSegmentSec),
-            style = MaterialTheme.typography.display1,
-            color = textColor,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        val statusLabel = when (timerState.status) {
-            RunStatus.PAUSED -> stringResource(R.string.action_pause)
-            RunStatus.DONE -> stringResource(R.string.timer_done)
-            RunStatus.RUNNING -> stringResource(R.string.tile_timer_running)
-            else -> stringResource(R.string.timer_ready)
-        }
-
-        Text(
-            text = statusLabel,
-            style = MaterialTheme.typography.caption2,
-            color = supportingColor,
-            textAlign = TextAlign.Center
-        )
-    }
     }
 }
 

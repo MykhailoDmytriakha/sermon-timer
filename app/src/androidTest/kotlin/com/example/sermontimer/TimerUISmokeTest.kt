@@ -95,7 +95,8 @@ class TimerUISmokeTest {
         }
 
         // Verify preset is displayed
-        composeTestRule.onNodeWithTag("preset-${testPreset.id}", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("preset-${testPreset.id}", useUnmergedTree = true)
+            .assertExists()
 
         // Verify default indicator is shown (icon with content description)
         // TODO: Test for default indicator icon presence
@@ -111,7 +112,8 @@ class TimerUISmokeTest {
         composeTestRule.waitForText("Presets")
         composeTestRule.onNodeWithText("Presets", useUnmergedTree = true).assertExists()
         composeTestRule.waitForTag("preset-${testPreset.id}")
-        composeTestRule.onNodeWithTag("preset-${testPreset.id}", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("preset-${testPreset.id}", useUnmergedTree = true)
+            .assertExists()
 
         // Simulate running state to navigate to timer screen
         val runningState = TimerState(
@@ -119,7 +121,11 @@ class TimerUISmokeTest {
             segment = Segment.INTRO,
             remainingInSegmentSec = testPreset.introSec,
             elapsedTotalSec = 0,
-            durations = SegmentDurations(testPreset.introSec, testPreset.mainSec, testPreset.outroSec),
+            durations = SegmentDurations(
+                testPreset.introSec,
+                testPreset.mainSec,
+                testPreset.outroSec
+            ),
             startedAtElapsedRealtime = SystemClock.elapsedRealtime(),
             activePreset = testPreset.toActivePresetMeta()
         )
@@ -135,8 +141,10 @@ class TimerUISmokeTest {
         val stopDescription = context.getString(R.string.action_stop)
 
         composeTestRule.waitForContentDescription(pauseDescription)
-        composeTestRule.onNodeWithContentDescription(pauseDescription, useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithContentDescription(stopDescription, useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithContentDescription(pauseDescription, useUnmergedTree = true)
+            .assertExists()
+        composeTestRule.onNodeWithContentDescription(stopDescription, useUnmergedTree = true)
+            .assertExists()
     }
 
     @Test
@@ -146,7 +154,11 @@ class TimerUISmokeTest {
             segment = Segment.MAIN,
             remainingInSegmentSec = 245, // 4:05 remaining
             elapsedTotalSec = 55,
-            durations = SegmentDurations(testPreset.introSec, testPreset.mainSec, testPreset.outroSec),
+            durations = SegmentDurations(
+                testPreset.introSec,
+                testPreset.mainSec,
+                testPreset.outroSec
+            ),
             startedAtElapsedRealtime = System.currentTimeMillis(),
             activePreset = testPreset.toActivePresetMeta() // Provide active preset for RUNNING status
         )
@@ -175,9 +187,11 @@ class TimerUISmokeTest {
         composeTestRule.onNodeWithText(segmentLabel, useUnmergedTree = true).assertExists()
 
         // Verify control buttons
-        composeTestRule.onNodeWithContentDescription(pauseDescription, useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithContentDescription(pauseDescription, useUnmergedTree = true)
+            .assertExists()
         composeTestRule.onNodeWithText(skipLabel, useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithContentDescription(stopDescription, useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithContentDescription(stopDescription, useUnmergedTree = true)
+            .assertExists()
     }
 
     @Test
@@ -186,7 +200,8 @@ class TimerUISmokeTest {
         assertThat(viewModel).isNotNull()
 
         val repository = TimerDataProvider.getRepository()
-        val durations = SegmentDurations(testPreset.introSec, testPreset.mainSec, testPreset.outroSec)
+        val durations =
+            SegmentDurations(testPreset.introSec, testPreset.mainSec, testPreset.outroSec)
 
         // Simulate running state emitted by service
         val runningState = TimerState(
@@ -233,7 +248,10 @@ private fun ComposeTestRule.waitForTag(tag: String, timeoutMillis: Long = 5_000L
     }
 }
 
-private fun ComposeTestRule.waitForContentDescription(description: String, timeoutMillis: Long = 5_000L) {
+private fun ComposeTestRule.waitForContentDescription(
+    description: String,
+    timeoutMillis: Long = 5_000L
+) {
     waitUntil(timeoutMillis) {
         onAllNodesWithContentDescription(description, useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()

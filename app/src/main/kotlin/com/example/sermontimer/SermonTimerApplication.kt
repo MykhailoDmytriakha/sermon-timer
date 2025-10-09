@@ -2,9 +2,6 @@ package com.example.sermontimer
 
 import android.app.Application
 import com.example.sermontimer.data.TimerDataProvider
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 class SermonTimerApplication : Application() {
 

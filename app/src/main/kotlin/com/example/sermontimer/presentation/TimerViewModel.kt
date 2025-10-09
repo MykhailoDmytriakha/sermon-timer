@@ -11,7 +11,6 @@ import com.example.sermontimer.service.TimerService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -160,7 +159,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         navigateToPresetList()
     }
 
-    fun updateAmbientState(isAmbient: Boolean, isLowBit: Boolean, requiresBurnInProtection: Boolean) {
+    fun updateAmbientState(
+        isAmbient: Boolean,
+        isLowBit: Boolean,
+        requiresBurnInProtection: Boolean
+    ) {
         _ambientState.value = AmbientUiState(
             isAmbient = isAmbient,
             isLowBit = isLowBit,
@@ -203,7 +206,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun initializeDefaultsIfNeeded() {
         // Import the provider function
-        com.example.sermontimer.data.TimerDataProvider.initializeDefaultsIfNeeded()
+        TimerDataProvider.initializeDefaultsIfNeeded()
     }
 
     enum class Screen {

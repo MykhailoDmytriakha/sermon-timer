@@ -1,6 +1,11 @@
 package com.example.sermontimer.domain.engine
 
-import com.example.sermontimer.domain.model.*
+import com.example.sermontimer.domain.model.Preset
+import com.example.sermontimer.domain.model.RunStatus
+import com.example.sermontimer.domain.model.Segment
+import com.example.sermontimer.domain.model.SegmentDurations
+import com.example.sermontimer.domain.model.TimerState
+import com.example.sermontimer.domain.model.toActivePresetMeta
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 

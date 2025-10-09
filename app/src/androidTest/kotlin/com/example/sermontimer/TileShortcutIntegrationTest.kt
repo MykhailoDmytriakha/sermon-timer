@@ -8,13 +8,12 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.example.sermontimer.R
 import com.example.sermontimer.data.TimerDataProvider
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.RunStatus
@@ -98,7 +97,8 @@ class TileShortcutIntegrationTest {
 
         // Verify preset is available
         composeTestRule.waitForTag("preset-${testPreset.id}")
-        composeTestRule.onNodeWithTag("preset-${testPreset.id}", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("preset-${testPreset.id}", useUnmergedTree = true)
+            .assertExists()
     }
 
     @Test
@@ -128,7 +128,8 @@ class TileShortcutIntegrationTest {
 
         // Verify default preset is displayed
         composeTestRule.waitForTag("preset-${testPreset.id}")
-        composeTestRule.onNodeWithTag("preset-${testPreset.id}", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("preset-${testPreset.id}", useUnmergedTree = true)
+            .assertExists()
 
         // Simulate starting a timer to navigate to timer screen
         val runningState = createRunningState()
@@ -146,8 +147,10 @@ class TileShortcutIntegrationTest {
         val stopDescription = context.getString(R.string.action_stop)
 
         composeTestRule.waitForContentDescription(pauseDescription)
-        composeTestRule.onNodeWithContentDescription(pauseDescription, useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithContentDescription(stopDescription, useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithContentDescription(pauseDescription, useUnmergedTree = true)
+            .assertExists()
+        composeTestRule.onNodeWithContentDescription(stopDescription, useUnmergedTree = true)
+            .assertExists()
     }
 
     @Test
@@ -164,7 +167,7 @@ class TileShortcutIntegrationTest {
 
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val pauseDescription = context.getString(R.string.action_pause)
-        val stopDescription = context.getString(R.string.action_stop)
+        context.getString(R.string.action_stop)
 
         // Start timer
         runBlocking {
@@ -176,7 +179,8 @@ class TileShortcutIntegrationTest {
         }
 
         composeTestRule.waitForContentDescription(pauseDescription)
-        composeTestRule.onNodeWithContentDescription(pauseDescription, useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithContentDescription(pauseDescription, useUnmergedTree = true)
+            .assertExists()
 
         // Stop timer
         runBlocking {
@@ -237,7 +241,10 @@ private fun ComposeTestRule.waitForTag(tag: String, timeoutMillis: Long = 5_000L
     }
 }
 
-private fun ComposeTestRule.waitForContentDescription(description: String, timeoutMillis: Long = 5_000L) {
+private fun ComposeTestRule.waitForContentDescription(
+    description: String,
+    timeoutMillis: Long = 5_000L
+) {
     waitUntil(timeoutMillis) {
         onAllNodesWithContentDescription(description, useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()

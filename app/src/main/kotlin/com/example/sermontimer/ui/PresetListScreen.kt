@@ -1,7 +1,15 @@
 package com.example.sermontimer.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,8 +18,11 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
-import androidx.wear.compose.material.Icon
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -20,10 +31,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.wear.compose.material.*
+import androidx.wear.compose.material.Button
+import androidx.wear.compose.material.ButtonDefaults
+import androidx.wear.compose.material.Card
+import androidx.wear.compose.material.Icon
+import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.Scaffold
+import androidx.wear.compose.material.Text
+import androidx.wear.compose.material.TimeText
 import com.example.sermontimer.R
 import com.example.sermontimer.domain.model.Preset
-import com.example.sermontimer.domain.model.SegmentDurations
 import com.example.sermontimer.util.DurationFormatter
 
 @Composable
@@ -61,7 +78,10 @@ fun PresetListScreen(
 
                 item {
                     Text(
-                        text = stringResource(R.string.set_default_preset_message, showSetDefaultConfirmation?.title ?: ""),
+                        text = stringResource(
+                            R.string.set_default_preset_message,
+                            showSetDefaultConfirmation?.title ?: ""
+                        ),
                         style = MaterialTheme.typography.body2,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
@@ -109,49 +129,49 @@ fun PresetListScreen(
         Scaffold(
             timeText = { TimeText() }
         ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("preset-list"),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            item {
-                Text(
-                    text = stringResource(R.string.presets_title),
-                    style = MaterialTheme.typography.title3,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("preset-list"),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                item {
+                    Text(
+                        text = stringResource(R.string.presets_title),
+                        style = MaterialTheme.typography.title3,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
-            items(presets) { preset ->
-                PresetListItem(
-                    preset = preset,
-                    isDefault = preset.id == defaultPresetId,
-                    onClick = { onPresetSelected(preset) },
-                    onEdit = { onEditPreset(preset) },
-                    onStartTimer = { onStartTimer(preset) },
-                    onSetDefault = { onSetDefault(if (it) preset.id else null) },
-                    onShowSetDefaultDialog = { showSetDefaultConfirmation = it }
-                )
-            }
+                items(presets) { preset ->
+                    PresetListItem(
+                        preset = preset,
+                        isDefault = preset.id == defaultPresetId,
+                        onClick = { onPresetSelected(preset) },
+                        onEdit = { onEditPreset(preset) },
+                        onStartTimer = { onStartTimer(preset) },
+                        onSetDefault = { onSetDefault(if (it) preset.id else null) },
+                        onShowSetDefaultDialog = { showSetDefaultConfirmation = it }
+                    )
+                }
 
-            item {
-                Button(
-                    onClick = onAddPreset,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("add-preset")
-                ) {
-                    Text(text = stringResource(R.string.add_preset))
+                item {
+                    Button(
+                        onClick = onAddPreset,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("add-preset")
+                    ) {
+                        Text(text = stringResource(R.string.add_preset))
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(48.dp))
                 }
             }
-
-            item {
-                Spacer(modifier = Modifier.height(48.dp))
-            }
-        }
         }
     }
 }
@@ -209,7 +229,7 @@ fun PresetListItem(
                     shape = RoundedCornerShape(22.dp), // Perfect circle for familiarity
                     colors = ButtonDefaults.buttonColors(
                         backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
-                        contentColor = MaterialTheme.colors.secondary ,
+                        contentColor = MaterialTheme.colors.secondary,
                         disabledBackgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.2f),
                         disabledContentColor = MaterialTheme.colors.primary
                     )

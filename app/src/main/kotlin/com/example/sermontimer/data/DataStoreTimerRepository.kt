@@ -1,9 +1,12 @@
 package com.example.sermontimer.data
 
 import android.content.Context
-import androidx.datastore.core.DataStore
 import android.util.Log
-import androidx.datastore.preferences.core.*
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.TimerState
@@ -11,7 +14,6 @@ import com.example.sermontimer.tile.TileUpdateDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
