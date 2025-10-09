@@ -3,6 +3,7 @@ package com.example.sermontimer.tile
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.wear.tiles.TileService
 import com.example.sermontimer.data.TimerDataProvider
 import com.example.sermontimer.data.TimerDataRepository
@@ -18,6 +19,7 @@ import kotlinx.coroutines.runBlocking
 class TileActionActivity : Activity() {
 
     private val repository: TimerDataRepository by lazy { TimerDataProvider.getRepository() }
+    private val logTag = TILE_LOG_TAG
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,13 +35,18 @@ class TileActionActivity : Activity() {
 
     private fun handleAction(intent: Intent?) {
         val action = intent?.getStringExtra(EXTRA_TILE_ACTION) ?: return
+        val rawPresetId = intent.getStringExtra(EXTRA_PRESET_ID)
+        Log.i(logTag, "TileActionActivity handling action=$action preset=${rawPresetId ?: "none"}")
         when (action) {
             ACTION_START -> {
-                val presetId = resolvePresetId(intent.getStringExtra(EXTRA_PRESET_ID))
+                val presetId = resolvePresetId(rawPresetId)
                 if (presetId != null) {
                     TimerService.startService(applicationContext, presetId)
+                    Log.i(logTag, "TileActionActivity started TimerService with preset=$presetId")
+                    openMainActivity()
+                } else {
+                    Log.w(logTag, "TileActionActivity could not resolve preset for ACTION_START")
                 }
-                openMainActivity()
             }
             ACTION_VIEW_PROGRESS -> openMainActivity()
             ACTION_PAUSE -> TimerService.pauseService(applicationContext)
@@ -85,5 +92,7 @@ class TileActionActivity : Activity() {
         const val ACTION_PAUSE = "pause"
         const val ACTION_RESUME = "resume"
         const val ACTION_OPEN_APP = "open_app"
+
+        private const val TILE_LOG_TAG = "TILE"
     }
 }

@@ -42,7 +42,7 @@
     <!-- Tile -->
     <string name="tile_ready_to_start">Ready to Start</string>
     <string name="tile_description">Quick timer controls</string>
-    <string name="tile_open_app">Open App</string>
+    <string name="tile_start_timer">Start Timer</string>
     <string name="tile_app_label">Timer</string>
     <string name="tile_label_running">%1$s • %2$s</string>
     <string name="tile_label_paused">Paused • %1$s • %2$s</string>
