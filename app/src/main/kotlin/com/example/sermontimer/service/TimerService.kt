@@ -16,6 +16,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.drawable.Icon
 import android.os.Bundle
+import android.os.PowerManager
 import android.os.SystemClock
 import android.widget.RemoteViews
 import androidx.annotation.ColorInt
@@ -70,6 +71,8 @@ class TimerService : Service() {
 
     private var timerJob: Job? = null
     private val notificationManager by lazy { getSystemService(NOTIFICATION_SERVICE) as NotificationManager }
+    private val powerManager by lazy { getSystemService(POWER_SERVICE) as PowerManager }
+    private var sessionWakeLock: PowerManager.WakeLock? = null
 
     // Guard for engine initialization race condition
     private var engineReady = false
@@ -90,6 +93,7 @@ class TimerService : Service() {
         private const val COUNTDOWN_WINDOW_MS = COUNTDOWN_SECONDS * 1000L
         private const val COUNTDOWN_GRACE_MS = 500L
         private const val REQUEST_EXACT_ALARM_SETTINGS = 1001
+        private const val WAKE_LOCK_TAG = "SermonTimer:active-session"
 
         // Px size of the runtime-generated chip icon.
         private const val ICON_BITMAP_PX = 96
@@ -305,6 +309,7 @@ class TimerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        releaseWakeLock()
         timerJob?.cancel()
         serviceScope.cancel()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -312,6 +317,45 @@ class TimerService : Service() {
         } else {
             @Suppress("DEPRECATION")
             stopForeground(true)
+        }
+    }
+
+    /**
+     * Acquire a PARTIAL_WAKE_LOCK so the CPU stays awake for the entire active session
+     * (PREROLL → RUNNING → OVERTIME). Without this, Wear OS may suspend the CPU between
+     * scheduled events on long sermons, causing the 1 s tick coroutine and the Now bar
+     * Chronometer to drift visibly.
+     *
+     * Idempotent: subsequent calls are no-ops while the lock is already held.
+     */
+    private fun acquireWakeLock() {
+        val existing = sessionWakeLock
+        if (existing != null && existing.isHeld) return
+        val lock = existing ?: powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            WAKE_LOCK_TAG,
+        ).also {
+            it.setReferenceCounted(false)
+            sessionWakeLock = it
+        }
+        try {
+            // No timeout: the lifecycle is bounded by observeTimerState calling
+            // releaseWakeLock the moment state.isActive becomes false. onDestroy is the
+            // belt-and-braces fallback if the service is killed mid-session.
+            lock.acquire()
+        } catch (e: SecurityException) {
+            android.util.Log.w("SRV", "WAKE_LOCK acquire failed: ${e.message}")
+        }
+    }
+
+    private fun releaseWakeLock() {
+        val lock = sessionWakeLock ?: return
+        if (lock.isHeld) {
+            try {
+                lock.release()
+            } catch (e: RuntimeException) {
+                android.util.Log.w("SRV", "WAKE_LOCK release failed: ${e.message}")
+            }
         }
     }
 
@@ -363,6 +407,15 @@ class TimerService : Service() {
                     startTimerJob()
                 } else if (!state.isActive) {
                     timerJob?.cancel()
+                }
+
+                // Hold a partial wake lock for the duration of the active session so the CPU
+                // can't suspend during long sermons (1-2 h+). Released as soon as the engine
+                // returns to IDLE / DONE.
+                if (state.isActive) {
+                    acquireWakeLock()
+                } else {
+                    releaseWakeLock()
                 }
 
                 if (state.status != RunStatus.IDLE) {

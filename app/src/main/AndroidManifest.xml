@@ -4,22 +4,19 @@
     <!--
         TIMING STRATEGY:
         - Core ticks every 1s with elapsedRealtime() correction to drive state/UI (see TIMING_STRATEGY_EVALUATION.md).
-        - Added September 25, 2025: schedule AlarmManager exact alarms (with allowWhileIdle) to start T-10 haptics when permission granted;
-          falls back to tick-only cadence if exact alarms are unavailable.
-        Foreground service provides sufficient priority without manual wakelocks.
+        - AlarmManager exact alarms (USE_EXACT_ALARM) drive T-10 countdown haptics; reliable through Doze.
+        - WAKE_LOCK held for the duration of an active session (PREROLL/RUNNING/OVERTIME):
+          FGS exempts us from Doze background limits but does NOT keep the CPU from suspending
+          between events. For 1-2 h sermons that means the 1 s tick coroutine and the Now bar
+          chip would lag if we relied on FGS alone. Released as soon as the engine returns to
+          IDLE / DONE so we don't drain battery between sessions.
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!--
-        Android 16 (Wear OS 6 / One UI 8+) Live Updates / Promoted Ongoing Notification.
-        Required when calling Notification.Builder#setRequestPromotedOngoing(true) so the
-        notification is treated as a Live Update by the system: cap on watch face / Now bar /
-        AOD with our own background colour and segmented progress bar (no Samsung whitelist).
-    -->
-    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
@@ -46,17 +43,6 @@
         -->
         <meta-data
             android:name="com.google.android.wearable.standalone"
-            android:value="true" />
-
-        <!--
-            Samsung One UI 7+ Live Notifications / Now bar opt-in. Samsung gates the full
-            chipBgColor / progressSegments / nowbarPrimaryInfo extras behind a private package
-            whitelist, but flagging this meta-data lets Wear-side Now bar pick up *some* of
-            the extras we send via Notification.addExtras(...) when it's feeling generous.
-            Documented at https://akexorcist.dev/live-notifications-and-now-bar-in-samsung-one-ui-7-as-developer-en/
-        -->
-        <meta-data
-            android:name="com.samsung.android.support.ongoing_activity"
             android:value="true" />
 
         <activity

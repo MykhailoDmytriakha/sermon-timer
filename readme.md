@@ -54,7 +54,8 @@
 3. **Один взгляд — одна мысль**: на экране крупно остаток **текущей секции** и явная метка фазы.
 4. **Минимум трения**: быстрый старт с Tile; редактирование пресетов — заранее.
 5. **Восстановимость**: после перезагрузки/краша состояние восстанавливается.
-6. **Всегда на виду**: foreground‑уведомление публикует Ongoing Activity‑чип, а экран имеет ambient‑версию для быстрого возврата.
+6. **Всегда на виду**: foreground‑уведомление с `customDisplayBundle` публикует цветную капсулу прямо на циферблате (Galaxy Watch Now bar), а экран имеет ambient‑версию для быстрого возврата.
+7. **Длинные проповеди**: на время активной сессии удерживается `PARTIAL_WAKE_LOCK`, чтобы CPU не уснул на 1–2‑часовом таймере и тики не дрейфовали. Освобождается сразу после Stop / Done.
 
 ---
 
@@ -86,7 +87,7 @@
 * Энергопрофиль: тики 1–2 с; экран не удерживается включённым.
 * Надёжность: корректная работа в Doze; точность рубежей не хуже ±1–2 с.
 * Доступность: большой шрифт, высокий контраст; управление одной кнопкой.
-* Разрешения: на Wear OS 5 (API 34) используем `USE_EXACT_ALARM`, поэтому спец-доступ не отображается в настройках. На Wear OS 3.x (API 31–32) остаётся требование к «Будильники и напоминания» (`SCHEDULE_EXACT_ALARM`); без него приложение падает обратно на тики (возможна задержка до ~2 с в Doze). На Wear OS 4+ дополнительно запрашиваем `POST_NOTIFICATIONS`, иначе Ongoing Activity‑чип недоступен.
+* Разрешения: на Wear OS 5 (API 34) используем `USE_EXACT_ALARM`, поэтому спец-доступ не отображается в настройках. На Wear OS 3.x (API 31–32) остаётся требование к «Будильники и напоминания» (`SCHEDULE_EXACT_ALARM`); без него приложение падает обратно на тики (возможна задержка до ~2 с в Doze). На Wear OS 4+ дополнительно запрашиваем `POST_NOTIFICATIONS`, иначе foreground‑чип на циферблате не отображается. `WAKE_LOCK` удерживает CPU во время активной сессии (1–2 ч+ проповеди), чтобы тики не задерживались, когда часы на запястье в покое и экран выключен.
 
 ### Платформа
 
@@ -240,45 +241,56 @@ Idle → Running(INTRO) → boundary → Running(MAIN) → boundary → Running(
 
 ---
 
-## Капсула на циферблате (Now bar / Promoted Ongoing chip)
+## Капсула на циферблате (Galaxy Watch Now bar)
 
-Когда таймер запущен, на циферблате должна показываться **капсула с иконкой и тикающим временем** — как у штатного Samsung Timer. Это поверхность системы, и она требует **двух шагов**:
+Когда таймер запущен, на циферблате показывается **цветная капсула с иконкой и тикающим временем** — фон в accent‑цвете текущей фазы (🟡 Preroll → 🟢 Intro → 🔵 Main → 🟠 Outro → 🔴 Overtime). Реализация работает «из коробки» начиная с v1.21 — без user‑side opt‑in настроек.
 
-1. **Со стороны приложения (уже сделано):** foreground‑service публикует `OngoingActivity` с `Status` и `TimerPart` — капсула рендерится без пробуждения нашего процесса. См. `app/src/main/kotlin/com/example/sermontimer/service/TimerService.kt` (`maybeApplyOngoingActivity` + `buildOngoingStatus`). Категория `CATEGORY_STOPWATCH`, `LocusId`, accent‑цвет фазы, `setColorized(true)`.
+### Архитектура (v1.21+)
 
-2. **Со стороны часов (важно — пользователю нужно сделать вручную):** Samsung One UI Watch 7+ по умолчанию показывает третьесторонние приложения в Now bar **только как иконку**. Чтобы показать «иконка + текст»:
+Foreground‑сервис публикует обычное `NotificationCompat.Builder` уведомление с **только одной значимой нагрузкой** — `customDisplayBundle` в extras. Никаких `OngoingActivity.Builder`, `MessagingStyle`, `Notification.ProgressStyle`, `setRequestPromotedOngoing`, `setColor`/`setColorized`. Контракт точно скопирован с штатного Samsung Timer (`com.samsung.android.watch.timer` / `TimerWatch.apk`):
 
-   **На Galaxy Watch:** *Настройки → Циферблаты (Watch faces) → Now bar → Стиль Now bar → Sermon Timer → выбрать «Иконка с текстом» (Icon with text)*.
+```
+extras (outer):
+  customDisplayBundle:
+    enableNowBar = true
+    nowBarData:
+      type = 1
+      cardIconLeft / queIcon          — Icon фазы (цветной круг + белый глиф)
+      cardContents                    — статичный mm:ss (fallback)
+      cardChronometerRemoteView       — RemoteViews <Chronometer android:tag="aod_chronometer">
+      expandViewIcon
+      expandChronometerRemoteView
+      expandChronometerPosition = 1
+      cardColorStart / cardColorEnd   — ARGB gradient фона капсулы (главный accent фазы)
+      expandViewColorStart / expandViewColorEnd
+  forceAutoResume = true
+  ambientImmediateExpire = true
+```
 
-   После этого капсула покажет тикающие mm:ss в фирменном accent‑цвете фазы (зелёный для Intro, синий для Main, оранжевый для Outro, красный для Overtime, янтарный для preroll). На Wear OS без One UI этот opt‑in не нужен — там лончер сам решает по приоритету уведомления.
+Реализация — `TimerService.applySamsungNowBarExtras` + `TimerService.phaseAccent` + `res/layout/nowbar_chronometer.xml`. На каждой смене state (фаза / preset / preroll‑базис) уведомление перепубликуется через `notify()`, и Galaxy Watch sysui (`ConvertingNowBarData` → `WFOverlayNowBarCardView`) перерисовывает капсулу с новым `cardColorStart/End`.
 
-> Корень проблемы «капсула пустая, только иконка» в 95% случаев — этот пункт 2, а не код. Тестируйте на циферблатах с явными complication‑slots (Classic), либо — на Galaxy Watch с включённым в настройках Now bar.
+### Что НЕЛЬЗЯ возвращать
 
-### Цвет капсулы и фазы
+Любой helper, который инжектит дополнительные extras, маршрутизирует уведомление через legacy `OANowBarController` (серая капсула) вместо rich `ConvertingNowBarData`. Перечень (всё это было в v1.20 и удалено в v1.21):
 
-Samsung One UI 7 содержит **закрытый whitelist** для расширенного Now bar API (extras `android.ongoingActivityNoti.chipBgColor`, `progressSegments`, `nowbarPrimaryInfo` и др.). Эти phone-side extras на Galaxy Watch **не работают**: Wear-side sysui (`SecClockworkSysUi.apk`) их не читает. Тоже не работает ни `setColor + setColorized`, ни Android 16 Live Updates API (`Notification.ProgressStyle` + `setShortCriticalText`) — Wear-side тоже не уважает их для accent цвета капсулы.
+* `OngoingActivity.Builder` / `Status.TimerPart` — добавляет `androidx.core.ongoing.*` extras → router отправляет в legacy.
+* `setUsesChronometer(true)` — system chronometer вместо chronometer‑внутри‑RemoteView.
+* `NotificationCompat.ProgressStyle` / `setRequestPromotedOngoing(true)` / `setShortCriticalText`.
+* `setContentTitle` / `setContentText` / `setSubText` — у штатного Samsung Timer все три `null`.
+* `setLocusId` — нужен только для legacy chip path.
+* `setColor + setColorized(true)` — в rich path игнорируется, цвет берётся из `cardColorStart/End`.
+* `notificationManager.cancel(NOTIFICATION_ID); notify(...)` — на Android 14+ ломает FGS state. Штатный Samsung Timer так делает потому, что он privileged system app; третьесторонним приложениям нельзя.
+* Manifest `<meta-data com.samsung.android.support.ongoing_activity>` — это контракт фон‑тек phone‑side, watch sysui его не читает.
 
-**Что реально работает на Galaxy Watch (One UI Watch 8, Wear OS 6, Android 16):**
+### Tag, без которого ничего не тикает
 
-Watch sysui читает данные капсулы из `notification.extras.getBundle("customDisplayBundle").getBundle("nowBarData")`. Внутри `nowBarData` распознаются ключи:
+Galaxy Watch sysui берёт chronometer view из RemoteViews через **`findViewWithTag("aod_chronometer")`**. Без этого тега капсула рисуется цветной, но текст замораживается на снапшоте `cardContents`. В `res/layout/nowbar_chronometer.xml` проставлен `android:tag="aod_chronometer"` — это строго обязательно.
 
-| Ключ | Тип | Что задаёт |
-|---|---|---|
-| `cardColorStart` / `cardColorEnd` | `int` (ARGB) | Gradient фон капсулы — **то самое, что было всё время серым** |
-| `cardIconLeft` / `cardAnimatedIconLeft` | `Icon` | Иконка слева |
-| `cardIconBgLeft` | `Icon` | Background для иконки |
-| `cardIconRight` / `cardAnimatedIconRight` | `Icon` | Правая иконка (если есть) |
-| `expandViewIcon` / `expandViewIconBg` | `Icon` | Иконки expanded view |
-| `expandColorStart` / `expandColorEnd` | `int` | Gradient фон expanded view |
-| `expandPrimaryInfo` / `expandSecondaryInfo` | `String` | Текст в expanded view |
-| `cardChronometerRemoteView` / `expandChronometerRemoteView` | `RemoteViews` | Тикающий таймер‑слот |
-| `type` | `int` | Стиль (`1` = standard) |
+### Forensic‑путь, как пришли к v1.21
 
-Реализация — `TimerService.applySamsungNowBarExtras` + `TimerService.phaseAccent`. Bundle перепубликуется на каждом state change → фон меняется при пересечении границы фазы (Intro 🟢 → Main 🔵 → Outro 🟠 → Overtime 🔴, plus 🟡 Preroll, 🟣 Done).
+Полная история — в `.claude/skills/dig-deeper/SKILL.md` (worked example на 11 ветвей). Ключевая разворотная точка: **снять `dumpsys notification --noredact` со штатного Samsung Timer в момент его работы и сделать diff против нашего**. Diff показал, что у нас был *суперсет* extras относительно работающего baseline — лишние ключи (`androidx.core.ongoing.*`) и пушили нас в legacy renderer. Решение — **вычесть, а не добавить**: убрать `OngoingActivity.Builder` целиком и публиковать только то, что есть у штатного Timer.
 
-> Корень проблемы «фон серый» был не в whitelist, не в priority, не в выбранном API — а в том, что мы клали Bundle под **неправильным extras‑ключом**. Phone (One UI 7) использует `android.ongoingActivityNoti.*`, Watch (One UI Watch 8) — короткое `customDisplayBundle.nowBarData.*`. Это два независимых reverse‑engineered контракта, и на странице Akexorcist описан **только phone**.
-
-**Forensic‑путь, как нашли:** см. `.claude/skills/dig-deeper/SKILL.md` — пример «5 пивотов гипотез». TL;DR: вытащили `WearServices.apk` и `SecClockworkSysUi.apk` с часов через `adb pull`, прогнали через `dexdump`, нашли `notification.extras.getBundle("customDisplayBundle")` в методе `WearServices.adaptNotificationInner`, и `getInt("cardColorStart")` в `ConvertingNowBarData.releaseIfPossible$1`. Точные ключи — в DEX, не в документации.
+Контракт `customDisplayBundle.nowBarData.*` для GW — *shape‑gated*, не *signature‑gated*. Третьесторонние приложения попадают в rich path при правильной форме extras без всяких whitelist'ов / привилегий.
 
 ---
 
