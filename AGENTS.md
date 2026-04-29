@@ -194,6 +194,81 @@ Success
 `5040`) и используйте его во всех командах через `-P`. После работы foreground server можно остановить
 `Ctrl-C`; если нужно оставить соединение живым для следующих команд, не закрывайте Terminal 1.
 
+### 7.1.1 Переподключение уже спаренных часов в новой сессии
+
+После одного успешного `adb pair` ключ часов кэшируется в `~/.android/adbkey(.pub)` и **повторно
+парить часы не нужно**. В новой сессии достаточно `adb connect`. Подводных камней два: (а) IP/port
+часов могут поменяться (DHCP, перезагрузка часов, переключение Wi‑Fi), (б) стандартный ADB server
+на `5037` иногда **не публикует** mdns‑сервисы Galaxy Watch (видно пустой `adb mdns services`),
+тогда как clean server на отдельном порту видит часы корректно. Эталонный воркфлоу 2026‑04‑29:
+
+На часах включить **`Wireless debugging`** (но НЕ открывать `Pair new device` — pair уже сделан).
+
+На Mac:
+
+```bash
+# 1. Поднять отдельный clean ADB server (если 5038 занят — берите 5039 / 5040 / …).
+adb -P 5039 nodaemon server &       # Background. Останется живым на сессию.
+
+# 2. mdns обычно даёт два эндпоинта на одни часы — один из них connection-port.
+adb -P 5039 mdns services
+# Пример вывода:
+# adb-RFAT629H4WY-wREsuI       _adb-tls-connect._tcp  10.0.0.16:40415
+# adb-RFAT629H4WY-wREsuI (2)   _adb-tls-connect._tcp  10.0.0.16:35571
+
+# 3. Подключиться. Первый объявленный port может вернуть `Connection refused` —
+#    тогда пробуйте второй. Это нормально.
+adb -P 5039 connect 10.0.0.16:40415        # → "Connection refused" в нашем прогоне
+adb -P 5039 connect 10.0.0.16:35571        # → "connected to ..."
+
+# 4. Подтвердить.
+adb -P 5039 devices -l
+# 10.0.0.16:35571   device  product:projectxblue model:SM_R920 device:projectxbl transport_id:2
+
+# 5. С этого момента все команды — `adb -P 5039 -s 10.0.0.16:<port> ...`
+WATCH=10.0.0.16:35571
+adb -P 5039 -s $WATCH install -r app/build/outputs/apk/release/app-release-signed.apk
+adb -P 5039 -s $WATCH shell dumpsys package com.example.sermontimer | grep -E "versionCode|versionName"
+```
+
+Что делать, если `connect` падает с `No route to host`:
+- проверить `ping <ip>` — часы и Mac должны быть в одной Wi‑Fi сети;
+- убедиться, что на часах `Settings → Connections → Wi‑Fi → ⋮ → Auto switch off` стоит в **Off** (иначе часы засыпают и Wi‑Fi отваливается);
+- если IP часов изменился — пересмотреть `adb -P 5039 mdns services`, IP/port в выводе перебивают то, что было раньше.
+
+Что делать, если `connect` возвращает `failed to authenticate`:
+- ключ удалён или часы сделали reset → нужно сделать новый pair по §7.1 (полная процедура с 6‑значным кодом и `Pair new device`).
+
+Galaxy Watch 5 = `model:SM_R920`, `product:projectxblue`. Эта строка — самый надёжный признак, что adb достучался до правильного устройства, а не до эмулятора.
+
+### 7.2 Установка release‑APK на часы: `tools/install_watch_release.sh`
+
+В репо есть готовый скрипт `tools/install_watch_release.sh`, который собирает release APK, выравнивает
+(`zipalign`), подписывает (по умолчанию debug‑keystore — `~/.android/debug.keystore`, alias
+`androiddebugkey`, pass `android`) и ставит на устройство. Один шаг от исходников до часов.
+
+```bash
+# Поставить на первое подключённое устройство в state=device
+./tools/install_watch_release.sh
+
+# Целевое устройство (например, реальные часы через Wireless Debugging)
+./tools/install_watch_release.sh --device adb-RFAT629H4WY-wREsuI._adb-tls-connect._tcp
+
+# Только собрать и подписать, без установки
+./tools/install_watch_release.sh --skip-install
+```
+
+Полезные env‑override (см. `--help`): `SDK_DIR`, `BUILD_TOOLS_VERSION`, `KEYSTORE_PATH`,
+`KEYSTORE_ALIAS`, `KEYSTORE_PASSWORD`, `GRADLEW`. Если на часах уже установлена версия с другой
+подписью — `adb uninstall com.example.sermontimer` перед запуском (release‑debug-keystore не совпадёт
+с `assembleDebug` сборкой Studio).
+
+Для **debug‑APK** на эмулятор используйте обычный путь: `./gradlew :app:installDebug` или
+`adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+
+Подробный adb‑дебаг‑воркфлоу (скриншоты, тапы, dumpsys, подмена watch face и т.п.) — см.
+`.claude/skills/wear-debug/SKILL.md`.
+
 ---
 
 ## 8) Стандарты кодирования
@@ -307,6 +382,31 @@ DONE
 * trunk‑based, короткоживущие ветки.
 * Conventional Commits: `feat(tile): ...`, `fix(service): ...` и т. п.
 * В PR: скриншоты/GIF для UI/Tile, список источников (§6), заметка про энергию/точность, если затронуто.
+
+### 16.1 Версионирование при release
+
+Перед каждым release‑коммитом **обязательно** поднимается обе пары в `app/build.gradle.kts`:
+
+```kotlin
+versionCode = 11      // +1 каждый релиз, монотонно
+versionName = "1.10"  // semver-ish, видно в presets list и в Settings
+```
+
+Правила:
+- bug‑fix only → `versionCode +1`, patch suffix (`1.10 → 1.10.1`) или просто minor bump, если patch не использовался
+- новая фича без миграции → `versionCode +1`, minor bump (`1.10 → 1.11`)
+- breaking (миграция пресетов / settings) → `versionCode +1`, major bump (`1.10 → 2.0`)
+
+Bump делается **в том же коммите**, что и user‑visible изменение, не отдельно. Сборку проверять `./gradlew :app:assembleRelease -x lintVitalRelease`, `aapt dump badging` или `adb shell dumpsys package … | grep version`. Подробнее (включая полный pre‑release чек‑лист) — `.claude/skills/wear-debug/SKILL.md` §15.
+
+### 16.2 Now bar / Promoted Ongoing chip — два слоя
+
+Когда пишешь / правишь поведение нотификации таймера, помни:
+
+1. **Код:** `TimerService.maybeApplyOngoingActivity` + `buildOngoingStatus` — публикует `OngoingActivity` со `Status.TimerPart` (живо тикает без пробуждения процесса). Категория `CATEGORY_STOPWATCH`, `LocusId`, accent‑цвет фазы, `setColorized(true)`.
+2. **User‑side:** на Galaxy Watch (One UI Watch 7+) third‑party apps по умолчанию показываются в Now bar **только иконкой**. Чтобы видеть тикающий текст, юзер вручную включает: *Settings → Watch faces → Now bar → Стиль Now bar → Sermon Timer → «Иконка с текстом»*. Это критично: 95% репортов «капсула пустая» не про код, а про эту настройку. Гайд для пользователя — в `readme.md` секции «Капсула на циферблате (Now bar / Promoted Ongoing chip)».
+
+Forensics, отличия от Google codelab, отличия от Android 16 Live Updates API — см. `.claude/skills/wear-debug/SKILL.md` §17.
 
 ---
 

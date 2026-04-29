@@ -10,7 +10,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.drawable.Icon
+import android.os.Bundle
+import android.os.SystemClock
+import android.widget.RemoteViews
+import androidx.annotation.ColorInt
+import androidx.core.graphics.drawable.DrawableCompat
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
@@ -18,8 +27,6 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.LocusIdCompat
-import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.tiles.TileService
 import androidx.wear.tiles.TileUpdateRequester
 import com.example.sermontimer.R
@@ -62,7 +69,6 @@ class TimerService : Service() {
     private lateinit var countdownScheduler: CountdownAlarmScheduler
 
     private var timerJob: Job? = null
-    private var chipRefreshJob: Job? = null
     private val notificationManager by lazy { getSystemService(NOTIFICATION_SERVICE) as NotificationManager }
 
     // Guard for engine initialization race condition
@@ -80,11 +86,47 @@ class TimerService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "timer"
         private const val CHANNEL_NAME = "Timer Service"
-        private const val LOCUS_ID = "sermon-timer-active"
         private const val COUNTDOWN_SECONDS = 10
         private const val COUNTDOWN_WINDOW_MS = COUNTDOWN_SECONDS * 1000L
         private const val COUNTDOWN_GRACE_MS = 500L
         private const val REQUEST_EXACT_ALARM_SETTINGS = 1001
+
+        // Px size of the runtime-generated chip icon.
+        private const val ICON_BITMAP_PX = 96
+
+        // Phase accent colours. Used for the chip icon and the Now bar gradient.
+        private const val ACCENT_PREROLL = 0xFFFFB300.toInt()   // amber
+        private const val ACCENT_INTRO = 0xFF66BB6A.toInt()     // green
+        private const val ACCENT_MAIN = 0xFF42A5F5.toInt()      // blue
+        private const val ACCENT_OUTRO = 0xFFFFA726.toInt()     // orange
+        private const val ACCENT_OVERTIME = 0xFFFF5252.toInt()  // red
+        private const val ACCENT_DONE = 0xFFCE93D8.toInt()      // purple
+
+        // Galaxy Watch One UI 8 Now bar extras — reverse-engineered byte-for-byte from the
+        // stock Samsung Timer (TimerWatch.apk). Stock app does NOT use OngoingActivity /
+        // Status.TimerPart / NotificationCompat.ProgressStyle / setRequestPromotedOngoing —
+        // it ships only `customDisplayBundle.nowBarData` plus `forceAutoResume` /
+        // `ambientImmediateExpire` on the outer extras. Adding ANY androidx.core.ongoing.*
+        // extras (i.e. OngoingActivity.Builder) routes the notification through legacy
+        // OANowBarController which ignores cardColorStart/End → result: grey chip.
+        private const val NOWBAR_KEY_CUSTOM_DISPLAY_BUNDLE = "customDisplayBundle"
+        private const val NOWBAR_KEY_ENABLE = "enableNowBar"
+        private const val NOWBAR_KEY_DATA = "nowBarData"
+        private const val NOWBAR_KEY_TYPE = "type"
+        private const val NOWBAR_KEY_CARD_ICON_LEFT = "cardIconLeft"
+        private const val NOWBAR_KEY_QUE_ICON = "queIcon"
+        private const val NOWBAR_KEY_CARD_CONTENTS = "cardContents"
+        private const val NOWBAR_KEY_CARD_CHRONO_RV = "cardChronometerRemoteView"
+        private const val NOWBAR_KEY_EXPAND_VIEW_ICON = "expandViewIcon"
+        private const val NOWBAR_KEY_EXPAND_CHRONO_RV = "expandChronometerRemoteView"
+        private const val NOWBAR_KEY_EXPAND_CHRONO_POS = "expandChronometerPosition"
+        private const val NOWBAR_KEY_CARD_COLOR_START = "cardColorStart"
+        private const val NOWBAR_KEY_CARD_COLOR_END = "cardColorEnd"
+        private const val NOWBAR_KEY_EXPAND_VIEW_COLOR_START = "expandViewColorStart"
+        private const val NOWBAR_KEY_EXPAND_VIEW_COLOR_END = "expandViewColorEnd"
+        private const val NOWBAR_KEY_FORCE_AUTO_RESUME = "forceAutoResume"
+        private const val NOWBAR_KEY_AMBIENT_EXPIRE = "ambientImmediateExpire"
+        private const val NOWBAR_TYPE_STANDARD = 1
 
         // Intent actions
         const val ACTION_START = "com.example.sermontimer.START"
@@ -263,7 +305,6 @@ class TimerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        chipRefreshJob?.cancel()
         timerJob?.cancel()
         serviceScope.cancel()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -309,9 +350,9 @@ class TimerService : Service() {
             engine.state.collect { state ->
                 val previous = lastKnownState
                 lastKnownState = state
-                // Wear OS throttles Ongoing Activity updates that arrive too quickly and
-                // falls back to icon-only when bombed each second. Push only on meaningful
-                // transitions; Status.TimerPart ticks the chip's text on its own.
+                // The Now bar Chronometer view ticks itself once placed in sysui's
+                // host window — we only need to republish on phase / status / preset
+                // transitions. See shouldRepublishNotification for the full predicate.
                 if (shouldRepublishNotification(previous, state)) {
                     updateNotification(state)
                 }
@@ -322,15 +363,6 @@ class TimerService : Service() {
                     startTimerJob()
                 } else if (!state.isActive) {
                     timerJob?.cancel()
-                }
-
-                // Start/stop the chip-refresh job based on whether the watch face chip
-                // should be visible. Refreshes setContentText every few seconds so the
-                // launcher renders live mm:ss on faces that don't honour chronometer.
-                if (shouldDisplayOngoingActivity(state) && chipRefreshJob?.isActive != true) {
-                    startChipRefreshJob()
-                } else if (!shouldDisplayOngoingActivity(state)) {
-                    chipRefreshJob?.cancel()
                 }
 
                 if (state.status != RunStatus.IDLE) {
@@ -463,35 +495,6 @@ class TimerService : Service() {
         }
     }
 
-    /**
-     * Re-publishes the ongoing notification every few seconds with a freshly formatted
-     * remaining-time string. Necessary because some Wear OS watch faces render the
-     * chip's text from `setContentText` (a snapshot at notification time) rather than
-     * from the live chronometer — without periodic refresh the chip would freeze on
-     * the moment the timer started.
-     *
-     * Cadence: 3 s for the last 30 s of a phase (smooth final sweep) and 5 s otherwise.
-     * That stays under the "a few updates per minute" budget Wear OS throttles against.
-     */
-    private fun startChipRefreshJob() {
-        chipRefreshJob = serviceScope.launch {
-            while (isActive) {
-                val state = lastKnownState
-                if (state != null && shouldDisplayOngoingActivity(state)) {
-                    updateNotification(state)
-                }
-                val intervalMs = when {
-                    state == null -> 5_000L
-                    state.status == RunStatus.PREROLL && state.prerollRemainingSec <= 30 -> 3_000L
-                    state.status == RunStatus.RUNNING && state.remainingInSegmentSec <= 30 -> 3_000L
-                    state.status == RunStatus.OVERTIME -> 5_000L
-                    else -> 5_000L
-                }
-                delay(intervalMs)
-            }
-        }
-    }
-
     private fun stopTimer() {
         safeSubmit(TimerCommand.Stop)
     }
@@ -514,14 +517,19 @@ class TimerService : Service() {
 
     private fun updateNotification(state: TimerState) {
         val notification = createNotification(state)
+        // notify() updates the existing foreground-service notification in place. We avoid
+        // notificationManager.cancel(NOTIFICATION_ID) here even though the stock Samsung
+        // Timer does it: on Android 14+ cancelling the FGS notification tears down the
+        // foreground state entirely (the next notify() comes in as a regular notification,
+        // and Wear sysui drops it from the Now bar surface).
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
     /**
      * Returns true if the new state warrants a notification republish. We rebuild the chip
      * only on state transitions (status / segment / preroll-or-overtime base / active preset)
-     * — never per-tick. Wear OS's chip ticks the live mm:ss text via Status.TimerPart on
-     * its own, and over-issuing causes the launcher to fall back to icon-only.
+     * — never per-tick. The Chronometer inside our nowBarData RemoteView ticks itself, and
+     * over-issuing notify() forces a full sysui re-parse on every second.
      */
     private fun shouldRepublishNotification(previous: TimerState?, current: TimerState): Boolean {
         if (previous == null) return true
@@ -536,191 +544,39 @@ class TimerService : Service() {
         return false
     }
 
+    /**
+     * Builds the foreground-service notification in the exact shape the stock Samsung
+     * Timer (`com.samsung.android.watch.timer` / TimerWatch.apk) ships. The shape is
+     * what determines whether Watch sysui routes the notification through the rich
+     * `ConvertingNowBarData` path (gradient background honoured) or the legacy
+     * `OANowBarController` path (icon-only, grey gradient).
+     *
+     * Stock shape — verified by `dumpsys notification --noredact` and dexdump:
+     *   - title/text/subText all null
+     *   - no `androidx.core.ongoing.*` extras (NO OngoingActivity.Builder)
+     *   - no MessagingStyle, ProgressStyle, chronometer, setRequestPromotedOngoing
+     *   - category = alarm, foreground service, ongoing, no-clear
+     *   - extras = customDisplayBundle{ enableNowBar=true, nowBarData{...} }
+     *              + forceAutoResume=true + ambientImmediateExpire=true
+     */
     private fun createNotification(state: TimerState): Notification {
-        val title = buildNotificationTitle(state)
-        val text = buildNotificationText(state)
-
-        // Active = anything where the timer should keep visible chip on the watch face.
-        val isOngoing = state.status == RunStatus.RUNNING ||
-                state.status == RunStatus.PAUSED ||
-                state.status == RunStatus.PREROLL ||
-                state.status == RunStatus.OVERTIME
+        val isOngoing = shouldDisplayOngoingActivity(state)
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_timer_ongoing)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setOngoing(isOngoing)
             .setOnlyAlertOnce(true)
-            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
-            // LocusId is what tells Wear OS to render the elongated chip with text on the
-            // watch face (Promoted Ongoing). Without it the launcher falls back to icon-only.
-            .setLocusId(LocusIdCompat(LOCUS_ID))
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setShowWhen(false)
             .setContentIntent(createActivityIntent())
 
-        // *** CRITICAL for the live-ticking pill chip ***
-        // Same trick Samsung Clock and Google Clock use: built-in chronometer that the
-        // notification framework ticks itself, no per-second republish from us.
-        applyChronometer(builder, state)
-
-        // Determinate progress drives the colour fill on the chip; accent matches phase.
-        applyProgressAndColour(builder, state)
-
-        // Add action buttons
+        applySamsungNowBarExtras(builder, state)
         addNotificationActions(builder, state)
         maybeAddExactAlarmHint(builder)
 
-        maybeApplyOngoingActivity(builder, state)
-
         return builder.build()
-    }
-
-    /**
-     * Wires the system chronometer into the notification so the watch-face chip renders
-     * a live, ticking mm:ss display — exactly the way Samsung Clock and Google Clock do.
-     *
-     * Mechanics: setUsesChronometer + setChronometerCountDown + setWhen(absoluteWallMs)
-     * tells the platform to display the difference between `now` and `when`, ticking it
-     * automatically. We never have to republish to advance the digits.
-     *
-     *   when = currentTime + remaining → counts down to zero
-     *   when = currentTime - elapsed   → counts up from start (overtime / paused)
-     */
-    private fun applyChronometer(builder: NotificationCompat.Builder, state: TimerState) {
-        val now = System.currentTimeMillis()
-        when (state.status) {
-            RunStatus.PREROLL -> {
-                builder.setWhen(now + state.prerollRemainingSec * 1000L)
-                    .setUsesChronometer(true)
-                    .setChronometerCountDown(true)
-                    .setShowWhen(true)
-            }
-            RunStatus.RUNNING -> {
-                // Per-segment countdown gives users the most useful number on the chip.
-                builder.setWhen(now + state.remainingInSegmentSec * 1000L)
-                    .setUsesChronometer(true)
-                    .setChronometerCountDown(true)
-                    .setShowWhen(true)
-            }
-            RunStatus.PAUSED -> {
-                // Frozen timestamp; chronometer would tick incorrectly when paused.
-                builder.setUsesChronometer(false)
-                    .setShowWhen(false)
-            }
-            RunStatus.OVERTIME -> {
-                // Count UP from when overtime began.
-                val elapsed = state.overtimeElapsedSec * 1000L
-                builder.setWhen(now - elapsed)
-                    .setUsesChronometer(true)
-                    .setChronometerCountDown(false)
-                    .setShowWhen(true)
-            }
-            RunStatus.DONE,
-            RunStatus.IDLE -> {
-                builder.setUsesChronometer(false).setShowWhen(false)
-            }
-        }
-    }
-
-    /**
-     * Applies a determinate progress bar + accent colour to the foreground notification so
-     * Wear OS renders an elongated horizontal "live notification" chip on the watch face
-     * (the same UI Samsung's stock timer shows). The progress encodes how much time has
-     * elapsed within the *current* phase — preroll countdown, total timer, or overtime —
-     * and the colour matches the on-screen phase accent.
-     */
-    private fun applyProgressAndColour(builder: NotificationCompat.Builder, state: TimerState) {
-        val total: Int
-        val current: Int
-        val accent: Int
-        val indeterminate: Boolean
-        when (state.status) {
-            RunStatus.PREROLL -> {
-                total = state.prerollTotalSec.coerceAtLeast(1)
-                current = (total - state.prerollRemainingSec).coerceIn(0, total)
-                accent = 0xFFFFB300.toInt()         // amber
-                indeterminate = false
-            }
-            RunStatus.RUNNING, RunStatus.PAUSED -> {
-                total = state.totalSec.coerceAtLeast(1)
-                current = state.elapsedTotalSec.coerceIn(0, total)
-                accent = when (state.segment) {
-                    com.example.sermontimer.domain.model.Segment.INTRO -> 0xFF66BB6A.toInt()
-                    com.example.sermontimer.domain.model.Segment.MAIN -> 0xFF42A5F5.toInt()
-                    com.example.sermontimer.domain.model.Segment.OUTRO -> 0xFFFFA726.toInt()
-                    com.example.sermontimer.domain.model.Segment.DONE -> 0xFFCE93D8.toInt()
-                }
-                indeterminate = false
-            }
-            RunStatus.OVERTIME -> {
-                total = state.overtimeMaxSec.coerceAtLeast(1)
-                current = state.overtimeElapsedSec.coerceIn(0, total)
-                accent = 0xFFFF5252.toInt()         // red
-                indeterminate = false
-            }
-            RunStatus.DONE -> {
-                total = 100; current = 100
-                accent = 0xFFCE93D8.toInt()
-                indeterminate = false
-            }
-            RunStatus.IDLE -> {
-                total = 0; current = 0
-                accent = 0
-                indeterminate = false
-            }
-        }
-        if (state.status != RunStatus.IDLE) {
-            builder.setProgress(total, current, indeterminate)
-            builder.setColor(accent)
-            builder.setColorized(true) // hint Wear OS to fill the chip with the accent
-        }
-    }
-
-    private fun buildNotificationTitle(state: TimerState): String {
-        val presetName = state.activePreset?.id ?: getString(R.string.app_name)
-        val phaseText = when (state.status) {
-            RunStatus.PREROLL -> getString(R.string.phase_preroll_short)
-            RunStatus.OVERTIME -> getString(R.string.phase_overtime_short)
-            else -> getPhaseShortLabel(state.segment)
-        }
-        return "$presetName • $phaseText"
-    }
-
-    private fun buildNotificationText(state: TimerState): String {
-        return when (state.status) {
-            RunStatus.DONE -> {
-                val totalMinutes = state.totalSec / 60
-                val totalSeconds = state.totalSec % 60
-                getString(R.string.timer_completed_with_total, totalMinutes, totalSeconds)
-            }
-            RunStatus.PREROLL -> {
-                getString(
-                    R.string.notification_preroll_text,
-                    DurationFormatter.formatTimerDisplay(state.prerollRemainingSec),
-                )
-            }
-            RunStatus.OVERTIME -> {
-                getString(
-                    R.string.notification_overtime_text,
-                    DurationFormatter.formatTimerDisplay(state.overtimeElapsedSec),
-                )
-            }
-            else -> {
-                val remainingMinutes = state.remainingInSegmentSec / 60
-                val remainingSeconds = state.remainingInSegmentSec % 60
-                val progressPercent =
-                    if (state.totalSec > 0) {
-                        ((state.elapsedTotalSec.toFloat() / state.totalSec.toFloat()) * 100).toInt()
-                    } else 0
-                getString(
-                    R.string.remaining_time_with_progress,
-                    remainingMinutes,
-                    remainingSeconds,
-                    progressPercent
-                )
-            }
-        }
     }
 
     private fun addNotificationActions(builder: NotificationCompat.Builder, state: TimerState) {
@@ -782,32 +638,146 @@ class TimerService : Service() {
         }
     }
 
+    private fun phaseColouredIcon(state: TimerState): Icon {
+        return buildPhaseIconBitmap(phaseAccent(state))
+    }
+
+    @ColorInt
+    private fun phaseAccent(state: TimerState): Int = when (state.status) {
+        RunStatus.PREROLL -> ACCENT_PREROLL
+        RunStatus.OVERTIME -> ACCENT_OVERTIME
+        RunStatus.RUNNING, RunStatus.PAUSED -> when (state.segment) {
+            Segment.INTRO -> ACCENT_INTRO
+            Segment.MAIN -> ACCENT_MAIN
+            Segment.OUTRO -> ACCENT_OUTRO
+            Segment.DONE -> ACCENT_DONE
+        }
+        // Idle / Done — fall back to the brand amber so the chip has a colour even before
+        // the engine assigns a phase.
+        else -> ACCENT_PREROLL
+    }
+
     /**
-     * Registers the foreground notification as an OngoingActivity — Wear OS uses this
-     * registration to render the watch-face chip and to wire the touchIntent. The actual
-     * live-ticking number on the chip comes from the chronometer set via [applyChronometer]
-     * (Samsung's stock timer uses the same approach). We deliberately do NOT pass a
-     * `Status` template here: when both Status and chronometer are present, the launcher
-     * tries to substitute placeholders that the chronometer is already filling and ends up
-     * showing icon-only.
+     * Galaxy Watch One UI 8 Now bar extras — byte-for-byte mirror of stock Samsung Timer
+     * (TimerWatch.apk). See companion-object NOWBAR_KEY_* docs for routing background.
+     *
+     * Critical pieces (verified by dexdump of the stock APK):
+     *   1. `cardChronometerRemoteView` / `expandChronometerRemoteView` — RemoteViews
+     *      with android.widget.Chronometer. Without this, sysui silently treats the
+     *      notification as non-rich and drops the gradient.
+     *   2. `expandViewColorStart` / `expandViewColorEnd` — note the `View` infix; we
+     *      previously shipped `expandColorStart/End` and they were ignored.
+     *   3. `queIcon` mirrors `cardIconLeft`. Sysui pulls one or the other depending on
+     *      surface; we provide both.
+     *   4. `forceAutoResume` / `ambientImmediateExpire` live on the OUTER extras Bundle,
+     *      siblings of `customDisplayBundle` — not nested.
      */
-    private fun maybeApplyOngoingActivity(builder: NotificationCompat.Builder, state: TimerState) {
-        if (!shouldDisplayOngoingActivity(state)) {
-            return
-        }
-        if (!hasNotificationPermission()) {
-            return
-        }
+    private fun applySamsungNowBarExtras(builder: NotificationCompat.Builder, state: TimerState) {
+        if (!shouldDisplayOngoingActivity(state)) return
+        val accent = phaseAccent(state)
+        val accentEnd = darkenForGradient(accent)
+        val phaseIcon = phaseColouredIcon(state)
+        val cardContents = buildOngoingShortText(state)
+        val cardChrono = buildChronometerRemoteView(state)
+        val expandChrono = buildChronometerRemoteView(state)
 
-        val ongoingActivity = OngoingActivity.Builder(applicationContext, NOTIFICATION_ID, builder)
-            .setStaticIcon(Icon.createWithResource(this, R.drawable.ic_timer_ongoing))
-            .setAnimatedIcon(Icon.createWithResource(this, R.drawable.ic_timer_ongoing))
-            .setTouchIntent(createActivityIntent())
-            .setTitle(getString(R.string.app_name))
-            .setCategory(android.app.Notification.CATEGORY_STOPWATCH)
-            .build()
+        val nowBarData = Bundle().apply {
+            putInt(NOWBAR_KEY_TYPE, NOWBAR_TYPE_STANDARD)
+            putParcelable(NOWBAR_KEY_CARD_ICON_LEFT, phaseIcon)
+            putParcelable(NOWBAR_KEY_QUE_ICON, phaseIcon)
+            putString(NOWBAR_KEY_CARD_CONTENTS, cardContents)
+            putParcelable(NOWBAR_KEY_CARD_CHRONO_RV, cardChrono)
+            putParcelable(NOWBAR_KEY_EXPAND_VIEW_ICON, phaseIcon)
+            putParcelable(NOWBAR_KEY_EXPAND_CHRONO_RV, expandChrono)
+            putInt(NOWBAR_KEY_EXPAND_CHRONO_POS, 1)
+            putInt(NOWBAR_KEY_CARD_COLOR_START, accent)
+            putInt(NOWBAR_KEY_CARD_COLOR_END, accentEnd)
+            putInt(NOWBAR_KEY_EXPAND_VIEW_COLOR_START, accent)
+            putInt(NOWBAR_KEY_EXPAND_VIEW_COLOR_END, accentEnd)
+        }
+        val customDisplay = Bundle().apply {
+            putBoolean(NOWBAR_KEY_ENABLE, true)
+            putBundle(NOWBAR_KEY_DATA, nowBarData)
+        }
+        builder.addExtras(Bundle().apply {
+            putBundle(NOWBAR_KEY_CUSTOM_DISPLAY_BUNDLE, customDisplay)
+            putBoolean(NOWBAR_KEY_FORCE_AUTO_RESUME, true)
+            putBoolean(NOWBAR_KEY_AMBIENT_EXPIRE, true)
+        })
+    }
 
-        ongoingActivity.apply(applicationContext)
+    /**
+     * Build a RemoteViews wrapping a system Chronometer. The Chronometer ticks every
+     * second on its own once placed in a host window — sysui hosts it inside the Now bar
+     * card. `base` is in SystemClock.elapsedRealtime() units:
+     *   - countdown: base = now + remainingMs → display goes from remainingMs down to 0
+     *   - count up:  base = now - elapsedMs   → display goes from elapsedMs upward
+     */
+    private fun buildChronometerRemoteView(state: TimerState): RemoteViews {
+        val rv = RemoteViews(packageName, R.layout.nowbar_chronometer)
+        val now = SystemClock.elapsedRealtime()
+        val (base, countDown) = when (state.status) {
+            RunStatus.PREROLL -> (now + state.prerollRemainingSec * 1000L) to true
+            RunStatus.RUNNING -> (now + state.remainingInSegmentSec * 1000L) to true
+            RunStatus.OVERTIME -> (now - state.overtimeElapsedSec * 1000L) to false
+            // Paused / Done / Idle — render frozen mm:ss by setting base in the past
+            // with countDown=false then immediately not started; simplest path is to
+            // still anchor a chronometer that won't visibly drift if shown briefly.
+            else -> (now - 0L) to false
+        }
+        rv.setChronometer(R.id.nowbar_chronometer, base, null, true)
+        rv.setChronometerCountDown(R.id.nowbar_chronometer, countDown)
+        return rv
+    }
+
+    /**
+     * Slightly darken the accent for the gradient end-stop. Stock Samsung Timer uses
+     * different colour resources for start/end — we approximate with an HSV value drop
+     * so we don't have to ship a full design palette.
+     */
+    @ColorInt
+    private fun darkenForGradient(@ColorInt argb: Int): Int {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(argb, hsv)
+        hsv[2] = (hsv[2] * 0.78f).coerceIn(0f, 1f)
+        return Color.HSVToColor(Color.alpha(argb), hsv)
+    }
+
+    /**
+     * Short snapshot string written into `cardContents`. Used by sysui as the fallback
+     * label when the Chronometer RemoteView can't be inflated for a given surface.
+     */
+    private fun buildOngoingShortText(state: TimerState): String {
+        return when (state.status) {
+            RunStatus.PREROLL -> DurationFormatter.formatTimerDisplay(state.prerollRemainingSec)
+            RunStatus.OVERTIME -> "+" + DurationFormatter.formatTimerDisplay(state.overtimeElapsedSec)
+            RunStatus.PAUSED, RunStatus.RUNNING ->
+                DurationFormatter.formatTimerDisplay(state.remainingInSegmentSec)
+            RunStatus.DONE -> getString(R.string.timer_done)
+            RunStatus.IDLE -> ""
+        }
+    }
+
+    private fun buildPhaseIconBitmap(@ColorInt accent: Int): Icon {
+        val size = ICON_BITMAP_PX
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val cx = size / 2f
+        val cy = size / 2f
+
+        Paint().apply {
+            isAntiAlias = true
+            color = accent
+        }.also { canvas.drawCircle(cx, cy, cx, it) }
+
+        val glyph = ContextCompat.getDrawable(this, R.drawable.ic_timer_ongoing)?.mutate()
+        if (glyph != null) {
+            DrawableCompat.setTint(glyph, Color.WHITE)
+            val pad = (size * 0.18f).toInt()
+            glyph.setBounds(pad, pad, size - pad, size - pad)
+            glyph.draw(canvas)
+        }
+        return Icon.createWithBitmap(bmp)
     }
 
     private fun shouldDisplayOngoingActivity(state: TimerState): Boolean {
@@ -825,34 +795,6 @@ class TimerService : Service() {
             ) == PackageManager.PERMISSION_GRANTED
         } else {
             true
-        }
-    }
-
-    private fun buildOngoingStatusText(state: TimerState): String {
-        val phaseLabel = getPhaseLabel(state.segment)
-        return if (state.status == RunStatus.PAUSED) {
-            getString(R.string.ongoing_status_paused, phaseLabel)
-        } else {
-            val remaining = DurationFormatter.formatTimerDisplay(state.remainingInSegmentSec)
-            getString(R.string.ongoing_status_running, phaseLabel, remaining)
-        }
-    }
-
-    private fun getPhaseLabel(segment: Segment): String {
-        return when (segment) {
-            Segment.INTRO -> getString(R.string.segment_intro)
-            Segment.MAIN -> getString(R.string.segment_main)
-            Segment.OUTRO -> getString(R.string.segment_outro)
-            Segment.DONE -> getString(R.string.timer_done)
-        }
-    }
-
-    private fun getPhaseShortLabel(segment: Segment): String {
-        return when (segment) {
-            Segment.INTRO -> getString(R.string.segment_intro_short)
-            Segment.MAIN -> getString(R.string.segment_main_short)
-            Segment.OUTRO -> getString(R.string.segment_outro_short)
-            Segment.DONE -> getString(R.string.timer_done)
         }
     }
 
@@ -931,12 +873,20 @@ class TimerService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // IMPORTANCE_DEFAULT (3) is required for the Wear launcher / Samsung Now bar to
+            // honour setColor + setColorized on the chip. With IMPORTANCE_LOW the chip renders
+            // in a neutral system colour regardless of the phase accent. See Google's
+            // android/codelab-ongoing-activity reference, which uses IMPORTANCE_DEFAULT for the
+            // same reason. Sound is muted at the channel level so we keep the silent UX.
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Timer service notifications"
+                setSound(null, null)
+                enableVibration(false)
+                setShowBadge(true)
             }
             notificationManager.createNotificationChannel(channel)
         }

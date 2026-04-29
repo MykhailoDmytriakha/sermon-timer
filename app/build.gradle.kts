@@ -7,14 +7,14 @@ plugins {
 
 android {
     namespace = "com.example.sermontimer"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.sermontimer"
         minSdk = 30
-        targetSdk = 35
-        versionCode = 11
-        versionName = "1.10"
+        targetSdk = 36
+        versionCode = 22
+        versionName = "1.21"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -38,6 +38,12 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    lint {
+        // Wear OS doesn't ship androidx.fragment; the ActivityResult launcher we use
+        // works correctly on ComponentActivity. Lint's hard requirement on Fragment 1.3
+        // is irrelevant on this surface.
+        disable += "InvalidFragmentVersionForActivityResult"
     }
 }
 
@@ -66,6 +72,7 @@ dependencies {
     implementation(libs.wear.core)
     implementation(libs.activity.compose)
     implementation(libs.core.splashscreen)
+    implementation(libs.core.ktx)
     implementation(libs.wear.ongoing)
     implementation(libs.wear.watchface.complications.data.source.ktx)
     testImplementation(libs.kotlinx.coroutines.test)

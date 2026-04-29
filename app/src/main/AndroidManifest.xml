@@ -13,6 +13,13 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+        Android 16 (Wear OS 6 / One UI 8+) Live Updates / Promoted Ongoing Notification.
+        Required when calling Notification.Builder#setRequestPromotedOngoing(true) so the
+        notification is treated as a Live Update by the system: cap on watch face / Now bar /
+        AOD with our own background colour and segmented progress bar (no Samsung whitelist).
+    -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
@@ -39,6 +46,17 @@
         -->
         <meta-data
             android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
+        <!--
+            Samsung One UI 7+ Live Notifications / Now bar opt-in. Samsung gates the full
+            chipBgColor / progressSegments / nowbarPrimaryInfo extras behind a private package
+            whitelist, but flagging this meta-data lets Wear-side Now bar pick up *some* of
+            the extras we send via Notification.addExtras(...) when it's feeling generous.
+            Documented at https://akexorcist.dev/live-notifications-and-now-bar-in-samsung-one-ui-7-as-developer-en/
+        -->
+        <meta-data
+            android:name="com.samsung.android.support.ongoing_activity"
             android:value="true" />
 
         <activity

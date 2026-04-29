@@ -8,6 +8,9 @@ composeFoundation = "1.4.1"
 wearToolingPreview = "1.0.0"
 activityCompose = "1.9.0"
 coreSplashscreen = "1.0.1"
+# androidx.core 1.16+ added NotificationCompat.ProgressStyle and setRequestPromotedOngoing()
+# / setShortCriticalText() needed for Android 16 Live Updates / Samsung Now bar (One UI 8+).
+coreKtx = "1.18.0"
 kotlinxCoroutines = "1.9.0"
 datastorePreferences = "1.1.1"
 kotlinxSerializationJson = "1.7.3"
@@ -42,6 +45,7 @@ protolayout-material = { group = "androidx.wear.protolayout", name = "protolayou
 protolayout-expression = { group = "androidx.wear.protolayout", name = "protolayout-expression", version.ref = "protolayout" }
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
+core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 lifecycle-service = { group = "androidx.lifecycle", name = "lifecycle-service", version.ref = "lifecycleService" }

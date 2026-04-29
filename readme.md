@@ -240,6 +240,48 @@ Idle → Running(INTRO) → boundary → Running(MAIN) → boundary → Running(
 
 ---
 
+## Капсула на циферблате (Now bar / Promoted Ongoing chip)
+
+Когда таймер запущен, на циферблате должна показываться **капсула с иконкой и тикающим временем** — как у штатного Samsung Timer. Это поверхность системы, и она требует **двух шагов**:
+
+1. **Со стороны приложения (уже сделано):** foreground‑service публикует `OngoingActivity` с `Status` и `TimerPart` — капсула рендерится без пробуждения нашего процесса. См. `app/src/main/kotlin/com/example/sermontimer/service/TimerService.kt` (`maybeApplyOngoingActivity` + `buildOngoingStatus`). Категория `CATEGORY_STOPWATCH`, `LocusId`, accent‑цвет фазы, `setColorized(true)`.
+
+2. **Со стороны часов (важно — пользователю нужно сделать вручную):** Samsung One UI Watch 7+ по умолчанию показывает третьесторонние приложения в Now bar **только как иконку**. Чтобы показать «иконка + текст»:
+
+   **На Galaxy Watch:** *Настройки → Циферблаты (Watch faces) → Now bar → Стиль Now bar → Sermon Timer → выбрать «Иконка с текстом» (Icon with text)*.
+
+   После этого капсула покажет тикающие mm:ss в фирменном accent‑цвете фазы (зелёный для Intro, синий для Main, оранжевый для Outro, красный для Overtime, янтарный для preroll). На Wear OS без One UI этот opt‑in не нужен — там лончер сам решает по приоритету уведомления.
+
+> Корень проблемы «капсула пустая, только иконка» в 95% случаев — этот пункт 2, а не код. Тестируйте на циферблатах с явными complication‑slots (Classic), либо — на Galaxy Watch с включённым в настройках Now bar.
+
+### Цвет капсулы и фазы
+
+Samsung One UI 7 содержит **закрытый whitelist** для расширенного Now bar API (extras `android.ongoingActivityNoti.chipBgColor`, `progressSegments`, `nowbarPrimaryInfo` и др.). Эти phone-side extras на Galaxy Watch **не работают**: Wear-side sysui (`SecClockworkSysUi.apk`) их не читает. Тоже не работает ни `setColor + setColorized`, ни Android 16 Live Updates API (`Notification.ProgressStyle` + `setShortCriticalText`) — Wear-side тоже не уважает их для accent цвета капсулы.
+
+**Что реально работает на Galaxy Watch (One UI Watch 8, Wear OS 6, Android 16):**
+
+Watch sysui читает данные капсулы из `notification.extras.getBundle("customDisplayBundle").getBundle("nowBarData")`. Внутри `nowBarData` распознаются ключи:
+
+| Ключ | Тип | Что задаёт |
+|---|---|---|
+| `cardColorStart` / `cardColorEnd` | `int` (ARGB) | Gradient фон капсулы — **то самое, что было всё время серым** |
+| `cardIconLeft` / `cardAnimatedIconLeft` | `Icon` | Иконка слева |
+| `cardIconBgLeft` | `Icon` | Background для иконки |
+| `cardIconRight` / `cardAnimatedIconRight` | `Icon` | Правая иконка (если есть) |
+| `expandViewIcon` / `expandViewIconBg` | `Icon` | Иконки expanded view |
+| `expandColorStart` / `expandColorEnd` | `int` | Gradient фон expanded view |
+| `expandPrimaryInfo` / `expandSecondaryInfo` | `String` | Текст в expanded view |
+| `cardChronometerRemoteView` / `expandChronometerRemoteView` | `RemoteViews` | Тикающий таймер‑слот |
+| `type` | `int` | Стиль (`1` = standard) |
+
+Реализация — `TimerService.applySamsungNowBarExtras` + `TimerService.phaseAccent`. Bundle перепубликуется на каждом state change → фон меняется при пересечении границы фазы (Intro 🟢 → Main 🔵 → Outro 🟠 → Overtime 🔴, plus 🟡 Preroll, 🟣 Done).
+
+> Корень проблемы «фон серый» был не в whitelist, не в priority, не в выбранном API — а в том, что мы клали Bundle под **неправильным extras‑ключом**. Phone (One UI 7) использует `android.ongoingActivityNoti.*`, Watch (One UI Watch 8) — короткое `customDisplayBundle.nowBarData.*`. Это два независимых reverse‑engineered контракта, и на странице Akexorcist описан **только phone**.
+
+**Forensic‑путь, как нашли:** см. `.claude/skills/dig-deeper/SKILL.md` — пример «5 пивотов гипотез». TL;DR: вытащили `WearServices.apk` и `SecClockworkSysUi.apk` с часов через `adb pull`, прогнали через `dexdump`, нашли `notification.extras.getBundle("customDisplayBundle")` в методе `WearServices.adaptNotificationInner`, и `getInt("cardColorStart")` в `ConvertingNowBarData.releaseIfPossible$1`. Точные ключи — в DEX, не в документации.
+
+---
+
 ## Дорожная карта
 
 * **MVP**: пресеты, Tile‑старт, сервис, уведомление, вибро‑рубежи, пауза/скип, восстановление.
