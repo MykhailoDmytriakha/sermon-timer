@@ -6,8 +6,16 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class RunStatus {
     IDLE,
+
+    /** Pre-start countdown before the actual sermon timer begins. */
+    PREROLL,
+
     RUNNING,
     PAUSED,
+
+    /** Timer crossed the configured total duration; counting up to overtimeMaxSec. */
+    OVERTIME,
+
     DONE,
 }
 

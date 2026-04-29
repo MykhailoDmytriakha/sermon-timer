@@ -1,12 +1,13 @@
 package com.example.sermontimer.data
 
+import com.example.sermontimer.domain.model.AppSettings
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.TimerState
 import kotlinx.coroutines.flow.Flow
 
 /**
  * Repository for timer data persistence using DataStore.
- * Stores presets list, default preset ID, and last timer state for recovery.
+ * Stores presets list, default preset ID, last timer state for recovery, and global app settings.
  */
 interface TimerDataRepository {
 
@@ -27,6 +28,11 @@ interface TimerDataRepository {
      * Emits null if no state was saved.
      */
     val lastTimerState: Flow<TimerState?>
+
+    /**
+     * Flow of the global app settings (preroll, overtime). Emits defaults when nothing is stored.
+     */
+    val appSettings: Flow<AppSettings>
 
     /**
      * Saves a list of presets, replacing any existing ones.
@@ -55,6 +61,11 @@ interface TimerDataRepository {
      * Pass null to clear saved state.
      */
     suspend fun saveTimerState(state: TimerState?)
+
+    /**
+     * Persists app-wide settings (preroll, overtime).
+     */
+    suspend fun saveAppSettings(settings: AppSettings)
 
     /**
      * Clears all data (for testing or reset).

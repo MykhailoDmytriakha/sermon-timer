@@ -31,5 +31,17 @@ sealed interface TimerEvent {
 
     /** Indicates that skip was ignored due to policy (e.g. not allowed). */
     data object SkipRejected : TimerEvent
+
+    /** Fired when entering preroll (preparation countdown) — distinct from RUNNING start. */
+    data object PrerollStarted : TimerEvent
+
+    /** Fired when preroll ends and the actual timer begins (the user steps to the podium). */
+    data object PrerollEnded : TimerEvent
+
+    /** Fired when the segments have all elapsed and overtime begins. */
+    data object OvertimeStarted : TimerEvent
+
+    /** Fired when the overtime cap is reached and we transition to DONE. */
+    data object OvertimeCapped : TimerEvent
 }
 

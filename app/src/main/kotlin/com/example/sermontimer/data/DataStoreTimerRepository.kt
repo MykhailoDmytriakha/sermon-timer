@@ -6,8 +6,10 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.sermontimer.domain.model.AppSettings
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.TimerState
 import com.example.sermontimer.tile.TileUpdateDispatcher
@@ -30,6 +32,8 @@ private object PreferencesKeys {
     val PRESETS_JSON = stringPreferencesKey("presets_json")
     val DEFAULT_PRESET_ID = stringPreferencesKey("default_preset_id")
     val LAST_TIMER_STATE_JSON = stringPreferencesKey("last_timer_state_json")
+    val PREROLL_SEC = intPreferencesKey("settings_preroll_sec")
+    val OVERTIME_MAX_SEC = intPreferencesKey("settings_overtime_max_sec")
 }
 
 private const val TIMER_LOG_TAG = "TIMER"
@@ -84,6 +88,29 @@ class DataStoreTimerRepository(
             scope = repositoryScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
+        )
+
+    override val appSettings: Flow<AppSettings> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val preroll = preferences[PreferencesKeys.PREROLL_SEC]
+                ?.coerceIn(0, AppSettings.MAX_PREROLL_SEC)
+                ?: AppSettings.DEFAULT_PREROLL_SEC
+            val overtime = preferences[PreferencesKeys.OVERTIME_MAX_SEC]
+                ?.coerceIn(0, AppSettings.MAX_OVERTIME_SEC)
+                ?: AppSettings.DEFAULT_OVERTIME_MAX_SEC
+            AppSettings(prerollSec = preroll, overtimeMaxSec = overtime)
+        }
+        .stateIn(
+            scope = repositoryScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = AppSettings(),
         )
 
     override val lastTimerState: Flow<TimerState?> = context.dataStore.data
@@ -157,6 +184,14 @@ class DataStoreTimerRepository(
                 TIMER_LOG_TAG,
                 "Default preset changed: ${previousId ?: "none"} -> ${presetId ?: "none"}"
             )
+        }
+        tileUpdateDispatcher.requestTileUpdate()
+    }
+
+    override suspend fun saveAppSettings(settings: AppSettings) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PREROLL_SEC] = settings.prerollSec
+            preferences[PreferencesKeys.OVERTIME_MAX_SEC] = settings.overtimeMaxSec
         }
         tileUpdateDispatcher.requestTileUpdate()
     }

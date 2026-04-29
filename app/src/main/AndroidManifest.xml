@@ -85,6 +85,29 @@
                 android:resource="@drawable/ic_launcher_foreground" />
         </service>
 
+        <!--
+            Watch-face complication: lets the user pin a live timer countdown to any
+            complication slot on their watch face. Updates auto-tick on the watch face
+            via TimeDifferenceComplicationText; we only push pulls on state events.
+        -->
+        <service
+            android:name=".complication.TimerComplicationService"
+            android:exported="true"
+            android:icon="@drawable/ic_timer_ongoing"
+            android:label="@string/complication_label"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT,LONG_TEXT,RANGED_VALUE,MONOCHROMATIC_IMAGE" />
+            <!-- 0 = no automatic polling; we push updates on state changes. -->
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="0" />
+        </service>
+
     </application>
 
 </manifest>

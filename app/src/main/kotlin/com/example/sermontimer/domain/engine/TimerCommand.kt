@@ -9,6 +9,8 @@ sealed interface TimerCommand {
     data class Start(
         val preset: Preset,
         val monotonicStartMs: Long,
+        val prerollSec: Int = 0,
+        val overtimeMaxSec: Int = 0,
     ) : TimerCommand
 
     data class Pause(

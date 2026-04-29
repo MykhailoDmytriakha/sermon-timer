@@ -18,11 +18,12 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.LocusIdCompat
 import androidx.wear.ongoing.OngoingActivity
-import androidx.wear.ongoing.Status
 import androidx.wear.tiles.TileService
 import androidx.wear.tiles.TileUpdateRequester
 import com.example.sermontimer.R
+import com.example.sermontimer.complication.TimerComplicationService
 import com.example.sermontimer.data.TimerDataProvider
 import com.example.sermontimer.domain.engine.CoroutineTimerEngine
 import com.example.sermontimer.domain.engine.DefaultTimerStateReducer
@@ -61,6 +62,7 @@ class TimerService : Service() {
     private lateinit var countdownScheduler: CountdownAlarmScheduler
 
     private var timerJob: Job? = null
+    private var chipRefreshJob: Job? = null
     private val notificationManager by lazy { getSystemService(NOTIFICATION_SERVICE) as NotificationManager }
 
     // Guard for engine initialization race condition
@@ -78,6 +80,7 @@ class TimerService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "timer"
         private const val CHANNEL_NAME = "Timer Service"
+        private const val LOCUS_ID = "sermon-timer-active"
         private const val COUNTDOWN_SECONDS = 10
         private const val COUNTDOWN_WINDOW_MS = COUNTDOWN_SECONDS * 1000L
         private const val COUNTDOWN_GRACE_MS = 500L
@@ -221,15 +224,18 @@ class TimerService : Service() {
                     }
 
                     val lastState = dataRepository.lastTimerState.first()
-                    if (lastState != null && (lastState.status == RunStatus.RUNNING || lastState.status == RunStatus.PAUSED)) {
+                    if (lastState != null && lastState.isActive) {
                         // Find the preset by ID and restore the state
                         val preset = dataRepository.presets.first()
                             .find { it.id == lastState.activePreset?.id }
                         if (preset != null) {
+                            val settings = dataRepository.appSettings.first()
                             engine.submit(
                                 TimerCommand.Start(
-                                    preset,
-                                    timeProvider.elapsedRealtimeMillis()
+                                    preset = preset,
+                                    monotonicStartMs = timeProvider.elapsedRealtimeMillis(),
+                                    prerollSec = settings.prerollSec,
+                                    overtimeMaxSec = settings.overtimeMaxSec,
                                 )
                             )
                         }
@@ -257,6 +263,8 @@ class TimerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        chipRefreshJob?.cancel()
+        timerJob?.cancel()
         serviceScope.cancel()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -274,21 +282,39 @@ class TimerService : Service() {
 
         val preset = dataRepository.presets.first().find { it.id == presetId }
         if (preset != null) {
-            val startCommand = TimerCommand.Start(preset, timeProvider.elapsedRealtimeMillis())
+            val settings = dataRepository.appSettings.first()
+            val startCommand = TimerCommand.Start(
+                preset = preset,
+                monotonicStartMs = timeProvider.elapsedRealtimeMillis(),
+                prerollSec = settings.prerollSec,
+                overtimeMaxSec = settings.overtimeMaxSec,
+            )
             engine.submit(startCommand)
+            // No-preroll path: reducer goes straight to RUNNING with no PrerollStarted event,
+            // so play the start cue here. Preroll path's haptic is fired by handlePrerollStarted.
+            if (settings.prerollSec == 0) {
+                hapticPatterns.playStartPattern()
+            }
             // Reflect start on the tile once; avoid per-second updates
             try {
                 tileUpdateRequester.requestUpdate(SermonTileService::class.java)
             } catch (_: Exception) {
             }
+            TimerComplicationService.requestUpdate(this)
         }
     }
 
     private fun observeTimerState() {
         serviceScope.launch {
             engine.state.collect { state ->
+                val previous = lastKnownState
                 lastKnownState = state
-                updateNotification(state)
+                // Wear OS throttles Ongoing Activity updates that arrive too quickly and
+                // falls back to icon-only when bombed each second. Push only on meaningful
+                // transitions; Status.TimerPart ticks the chip's text on its own.
+                if (shouldRepublishNotification(previous, state)) {
+                    updateNotification(state)
+                }
                 saveStateToDataStore(state)
 
                 // Start/stop timer job based on state
@@ -296,6 +322,15 @@ class TimerService : Service() {
                     startTimerJob()
                 } else if (!state.isActive) {
                     timerJob?.cancel()
+                }
+
+                // Start/stop the chip-refresh job based on whether the watch face chip
+                // should be visible. Refreshes setContentText every few seconds so the
+                // launcher renders live mm:ss on faces that don't honour chronometer.
+                if (shouldDisplayOngoingActivity(state) && chipRefreshJob?.isActive != true) {
+                    startChipRefreshJob()
+                } else if (!shouldDisplayOngoingActivity(state)) {
+                    chipRefreshJob?.cancel()
                 }
 
                 if (state.status != RunStatus.IDLE) {
@@ -329,6 +364,10 @@ class TimerService : Service() {
                     is TimerEvent.Paused -> handleTimerPaused()
                     is TimerEvent.Resumed -> handleTimerResumed()
                     is TimerEvent.Stopped -> handleTimerStopped()
+                    is TimerEvent.PrerollStarted -> handlePrerollStarted()
+                    is TimerEvent.PrerollEnded -> handlePrerollEnded()
+                    is TimerEvent.OvertimeStarted -> handleOvertimeStarted()
+                    is TimerEvent.OvertimeCapped -> handleTimerCompleted()
                     else -> {} // Ignore other events
                 }
             }
@@ -424,6 +463,35 @@ class TimerService : Service() {
         }
     }
 
+    /**
+     * Re-publishes the ongoing notification every few seconds with a freshly formatted
+     * remaining-time string. Necessary because some Wear OS watch faces render the
+     * chip's text from `setContentText` (a snapshot at notification time) rather than
+     * from the live chronometer — without periodic refresh the chip would freeze on
+     * the moment the timer started.
+     *
+     * Cadence: 3 s for the last 30 s of a phase (smooth final sweep) and 5 s otherwise.
+     * That stays under the "a few updates per minute" budget Wear OS throttles against.
+     */
+    private fun startChipRefreshJob() {
+        chipRefreshJob = serviceScope.launch {
+            while (isActive) {
+                val state = lastKnownState
+                if (state != null && shouldDisplayOngoingActivity(state)) {
+                    updateNotification(state)
+                }
+                val intervalMs = when {
+                    state == null -> 5_000L
+                    state.status == RunStatus.PREROLL && state.prerollRemainingSec <= 30 -> 3_000L
+                    state.status == RunStatus.RUNNING && state.remainingInSegmentSec <= 30 -> 3_000L
+                    state.status == RunStatus.OVERTIME -> 5_000L
+                    else -> 5_000L
+                }
+                delay(intervalMs)
+            }
+        }
+    }
+
     private fun stopTimer() {
         safeSubmit(TimerCommand.Stop)
     }
@@ -449,18 +517,55 @@ class TimerService : Service() {
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
+    /**
+     * Returns true if the new state warrants a notification republish. We rebuild the chip
+     * only on state transitions (status / segment / preroll-or-overtime base / active preset)
+     * — never per-tick. Wear OS's chip ticks the live mm:ss text via Status.TimerPart on
+     * its own, and over-issuing causes the launcher to fall back to icon-only.
+     */
+    private fun shouldRepublishNotification(previous: TimerState?, current: TimerState): Boolean {
+        if (previous == null) return true
+        if (previous.status != current.status) return true
+        if (previous.segment != current.segment) return true
+        if (previous.activePreset?.id != current.activePreset?.id) return true
+        // Re-anchor when the timer baseline shifts (resume, skip, alarm boundary correction).
+        if (previous.startedAtElapsedRealtime != current.startedAtElapsedRealtime) return true
+        // Re-anchor preroll / overtime totals when settings change between sessions.
+        if (previous.prerollTotalSec != current.prerollTotalSec) return true
+        if (previous.overtimeMaxSec != current.overtimeMaxSec) return true
+        return false
+    }
+
     private fun createNotification(state: TimerState): Notification {
         val title = buildNotificationTitle(state)
         val text = buildNotificationText(state)
 
+        // Active = anything where the timer should keep visible chip on the watch face.
+        val isOngoing = state.status == RunStatus.RUNNING ||
+                state.status == RunStatus.PAUSED ||
+                state.status == RunStatus.PREROLL ||
+                state.status == RunStatus.OVERTIME
+
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_timer_ongoing)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(state.status == RunStatus.RUNNING || state.status == RunStatus.PAUSED)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setOngoing(isOngoing)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+            // LocusId is what tells Wear OS to render the elongated chip with text on the
+            // watch face (Promoted Ongoing). Without it the launcher falls back to icon-only.
+            .setLocusId(LocusIdCompat(LOCUS_ID))
             .setContentIntent(createActivityIntent())
+
+        // *** CRITICAL for the live-ticking pill chip ***
+        // Same trick Samsung Clock and Google Clock use: built-in chronometer that the
+        // notification framework ticks itself, no per-second republish from us.
+        applyChronometer(builder, state)
+
+        // Determinate progress drives the colour fill on the chip; accent matches phase.
+        applyProgressAndColour(builder, state)
 
         // Add action buttons
         addNotificationActions(builder, state)
@@ -471,25 +576,143 @@ class TimerService : Service() {
         return builder.build()
     }
 
+    /**
+     * Wires the system chronometer into the notification so the watch-face chip renders
+     * a live, ticking mm:ss display — exactly the way Samsung Clock and Google Clock do.
+     *
+     * Mechanics: setUsesChronometer + setChronometerCountDown + setWhen(absoluteWallMs)
+     * tells the platform to display the difference between `now` and `when`, ticking it
+     * automatically. We never have to republish to advance the digits.
+     *
+     *   when = currentTime + remaining → counts down to zero
+     *   when = currentTime - elapsed   → counts up from start (overtime / paused)
+     */
+    private fun applyChronometer(builder: NotificationCompat.Builder, state: TimerState) {
+        val now = System.currentTimeMillis()
+        when (state.status) {
+            RunStatus.PREROLL -> {
+                builder.setWhen(now + state.prerollRemainingSec * 1000L)
+                    .setUsesChronometer(true)
+                    .setChronometerCountDown(true)
+                    .setShowWhen(true)
+            }
+            RunStatus.RUNNING -> {
+                // Per-segment countdown gives users the most useful number on the chip.
+                builder.setWhen(now + state.remainingInSegmentSec * 1000L)
+                    .setUsesChronometer(true)
+                    .setChronometerCountDown(true)
+                    .setShowWhen(true)
+            }
+            RunStatus.PAUSED -> {
+                // Frozen timestamp; chronometer would tick incorrectly when paused.
+                builder.setUsesChronometer(false)
+                    .setShowWhen(false)
+            }
+            RunStatus.OVERTIME -> {
+                // Count UP from when overtime began.
+                val elapsed = state.overtimeElapsedSec * 1000L
+                builder.setWhen(now - elapsed)
+                    .setUsesChronometer(true)
+                    .setChronometerCountDown(false)
+                    .setShowWhen(true)
+            }
+            RunStatus.DONE,
+            RunStatus.IDLE -> {
+                builder.setUsesChronometer(false).setShowWhen(false)
+            }
+        }
+    }
+
+    /**
+     * Applies a determinate progress bar + accent colour to the foreground notification so
+     * Wear OS renders an elongated horizontal "live notification" chip on the watch face
+     * (the same UI Samsung's stock timer shows). The progress encodes how much time has
+     * elapsed within the *current* phase — preroll countdown, total timer, or overtime —
+     * and the colour matches the on-screen phase accent.
+     */
+    private fun applyProgressAndColour(builder: NotificationCompat.Builder, state: TimerState) {
+        val total: Int
+        val current: Int
+        val accent: Int
+        val indeterminate: Boolean
+        when (state.status) {
+            RunStatus.PREROLL -> {
+                total = state.prerollTotalSec.coerceAtLeast(1)
+                current = (total - state.prerollRemainingSec).coerceIn(0, total)
+                accent = 0xFFFFB300.toInt()         // amber
+                indeterminate = false
+            }
+            RunStatus.RUNNING, RunStatus.PAUSED -> {
+                total = state.totalSec.coerceAtLeast(1)
+                current = state.elapsedTotalSec.coerceIn(0, total)
+                accent = when (state.segment) {
+                    com.example.sermontimer.domain.model.Segment.INTRO -> 0xFF66BB6A.toInt()
+                    com.example.sermontimer.domain.model.Segment.MAIN -> 0xFF42A5F5.toInt()
+                    com.example.sermontimer.domain.model.Segment.OUTRO -> 0xFFFFA726.toInt()
+                    com.example.sermontimer.domain.model.Segment.DONE -> 0xFFCE93D8.toInt()
+                }
+                indeterminate = false
+            }
+            RunStatus.OVERTIME -> {
+                total = state.overtimeMaxSec.coerceAtLeast(1)
+                current = state.overtimeElapsedSec.coerceIn(0, total)
+                accent = 0xFFFF5252.toInt()         // red
+                indeterminate = false
+            }
+            RunStatus.DONE -> {
+                total = 100; current = 100
+                accent = 0xFFCE93D8.toInt()
+                indeterminate = false
+            }
+            RunStatus.IDLE -> {
+                total = 0; current = 0
+                accent = 0
+                indeterminate = false
+            }
+        }
+        if (state.status != RunStatus.IDLE) {
+            builder.setProgress(total, current, indeterminate)
+            builder.setColor(accent)
+            builder.setColorized(true) // hint Wear OS to fill the chip with the accent
+        }
+    }
+
     private fun buildNotificationTitle(state: TimerState): String {
         val presetName = state.activePreset?.id ?: getString(R.string.app_name)
-        val phaseText = getPhaseShortLabel(state.segment)
+        val phaseText = when (state.status) {
+            RunStatus.PREROLL -> getString(R.string.phase_preroll_short)
+            RunStatus.OVERTIME -> getString(R.string.phase_overtime_short)
+            else -> getPhaseShortLabel(state.segment)
+        }
         return "$presetName • $phaseText"
     }
 
     private fun buildNotificationText(state: TimerState): String {
-        return when {
-            state.status == RunStatus.DONE -> {
+        return when (state.status) {
+            RunStatus.DONE -> {
                 val totalMinutes = state.totalSec / 60
                 val totalSeconds = state.totalSec % 60
                 getString(R.string.timer_completed_with_total, totalMinutes, totalSeconds)
             }
-
+            RunStatus.PREROLL -> {
+                getString(
+                    R.string.notification_preroll_text,
+                    DurationFormatter.formatTimerDisplay(state.prerollRemainingSec),
+                )
+            }
+            RunStatus.OVERTIME -> {
+                getString(
+                    R.string.notification_overtime_text,
+                    DurationFormatter.formatTimerDisplay(state.overtimeElapsedSec),
+                )
+            }
             else -> {
                 val remainingMinutes = state.remainingInSegmentSec / 60
                 val remainingSeconds = state.remainingInSegmentSec % 60
                 val progressPercent =
-                    ((state.elapsedTotalSec.toFloat() / state.totalSec.toFloat()) * 100).toInt()
+                    if (state.totalSec > 0) {
+                        ((state.elapsedTotalSec.toFloat() / state.totalSec.toFloat()) * 100).toInt()
+                    } else 0
                 getString(
                     R.string.remaining_time_with_progress,
                     remainingMinutes,
@@ -502,6 +725,12 @@ class TimerService : Service() {
 
     private fun addNotificationActions(builder: NotificationCompat.Builder, state: TimerState) {
         when (state.status) {
+            RunStatus.PREROLL -> {
+                // Skip jumps straight from preroll → RUNNING (preacher walks faster than expected).
+                builder.addAction(createSkipAction())
+                builder.addAction(createStopAction())
+            }
+
             RunStatus.RUNNING -> {
                 builder.addAction(createPauseAction())
                 if (state.activePreset?.allowSkip == true) {
@@ -512,6 +741,10 @@ class TimerService : Service() {
 
             RunStatus.PAUSED -> {
                 builder.addAction(createResumeAction())
+                builder.addAction(createStopAction())
+            }
+
+            RunStatus.OVERTIME -> {
                 builder.addAction(createStopAction())
             }
 
@@ -549,6 +782,15 @@ class TimerService : Service() {
         }
     }
 
+    /**
+     * Registers the foreground notification as an OngoingActivity — Wear OS uses this
+     * registration to render the watch-face chip and to wire the touchIntent. The actual
+     * live-ticking number on the chip comes from the chronometer set via [applyChronometer]
+     * (Samsung's stock timer uses the same approach). We deliberately do NOT pass a
+     * `Status` template here: when both Status and chronometer are present, the launcher
+     * tries to substitute placeholders that the chronometer is already filling and ends up
+     * showing icon-only.
+     */
     private fun maybeApplyOngoingActivity(builder: NotificationCompat.Builder, state: TimerState) {
         if (!shouldDisplayOngoingActivity(state)) {
             return
@@ -557,22 +799,22 @@ class TimerService : Service() {
             return
         }
 
-        val statusText = buildOngoingStatusText(state)
-        val status = Status.Builder()
-            .addTemplate(statusText)
-            .build()
-
         val ongoingActivity = OngoingActivity.Builder(applicationContext, NOTIFICATION_ID, builder)
             .setStaticIcon(Icon.createWithResource(this, R.drawable.ic_timer_ongoing))
+            .setAnimatedIcon(Icon.createWithResource(this, R.drawable.ic_timer_ongoing))
             .setTouchIntent(createActivityIntent())
-            .setStatus(status)
+            .setTitle(getString(R.string.app_name))
+            .setCategory(android.app.Notification.CATEGORY_STOPWATCH)
             .build()
 
         ongoingActivity.apply(applicationContext)
     }
 
     private fun shouldDisplayOngoingActivity(state: TimerState): Boolean {
-        return state.status == RunStatus.RUNNING || state.status == RunStatus.PAUSED
+        return state.status == RunStatus.RUNNING ||
+                state.status == RunStatus.PAUSED ||
+                state.status == RunStatus.PREROLL ||
+                state.status == RunStatus.OVERTIME
     }
 
     private fun hasNotificationPermission(): Boolean {
@@ -707,57 +949,64 @@ class TimerService : Service() {
         resetCountdownScheduling()
         // Play haptic pattern for segment boundary according to AGENTS.md §10
         hapticPatterns.playBoundaryPattern(event.nextSegment)
-        // Boundary reached impacts tile-relevant state; request a refresh
-        try {
-            tileUpdateRequester.requestUpdate(SermonTileService::class.java)
-        } catch (_: Exception) {
-        }
+        notifySurfacesOfStateChange()
     }
 
     private fun handleTimerCompleted() {
         android.util.Log.d("TIMER", "EVENT: TimerCompleted")
-        // Stop any ongoing countdown vibration before playing completion pattern
         hapticPatterns.stopCountdownVibration()
         resetCountdownScheduling()
-        // Play completion haptic pattern according to AGENTS.md §10
         hapticPatterns.playCompletionPattern()
-        try {
-            tileUpdateRequester.requestUpdate(SermonTileService::class.java)
-        } catch (_: Exception) {
-        }
+        notifySurfacesOfStateChange()
     }
 
     private fun handleTimerPaused() {
         android.util.Log.d("TIMER", "EVENT: TimerPaused")
-        // Stop countdown vibration when paused
         hapticPatterns.stopCountdownVibration()
         resetCountdownScheduling()
-        // TODO: Add pause feedback if needed
-        try {
-            tileUpdateRequester.requestUpdate(SermonTileService::class.java)
-        } catch (_: Exception) {
-        }
+        hapticPatterns.playLightTick()
+        notifySurfacesOfStateChange()
     }
 
     private fun handleTimerResumed() {
         android.util.Log.d("TIMER", "EVENT: TimerResumed")
-        // Countdown vibration will restart automatically in observeTimerState if in countdown phase
-        // TODO: Add resume feedback if needed
-        try {
-            tileUpdateRequester.requestUpdate(SermonTileService::class.java)
-        } catch (_: Exception) {
-        }
+        hapticPatterns.playLightTick()
+        notifySurfacesOfStateChange()
     }
 
     private fun handleTimerStopped() {
         android.util.Log.d("TIMER", "EVENT: TimerStopped")
-        // Stop countdown vibration when stopped
         hapticPatterns.stopCountdownVibration()
         resetCountdownScheduling()
-        // TODO: Add stop feedback if needed
+        hapticPatterns.playLightTick()
+        notifySurfacesOfStateChange()
+    }
+
+    private fun handlePrerollStarted() {
+        android.util.Log.d("TIMER", "EVENT: PrerollStarted")
+        hapticPatterns.playStartPattern()
+        notifySurfacesOfStateChange()
+    }
+
+    private fun handlePrerollEnded() {
+        android.util.Log.d("TIMER", "EVENT: PrerollEnded")
+        hapticPatterns.playPrerollEndedPattern()
+        notifySurfacesOfStateChange()
+    }
+
+    private fun handleOvertimeStarted() {
+        android.util.Log.d("TIMER", "EVENT: OvertimeStarted")
+        hapticPatterns.stopCountdownVibration()
+        resetCountdownScheduling()
+        hapticPatterns.playOvertimeStartedPattern()
+        notifySurfacesOfStateChange()
+    }
+
+    private fun notifySurfacesOfStateChange() {
         try {
             tileUpdateRequester.requestUpdate(SermonTileService::class.java)
         } catch (_: Exception) {
         }
+        TimerComplicationService.requestUpdate(this)
     }
 }

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.sermontimer.data.TimerDataProvider
+import com.example.sermontimer.domain.model.AppSettings
 import com.example.sermontimer.domain.model.Preset
 import com.example.sermontimer.domain.model.RunStatus
 import com.example.sermontimer.domain.model.TimerState
@@ -40,6 +41,9 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _isDataLoaded = MutableStateFlow(false)
     val isDataLoaded: StateFlow<Boolean> = _isDataLoaded.asStateFlow()
 
+    private val _appSettings = MutableStateFlow(AppSettings())
+    val appSettings: StateFlow<AppSettings> = _appSettings.asStateFlow()
+
     private var lastObservedRunStatus: RunStatus = RunStatus.IDLE
 
     init {
@@ -73,6 +77,26 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                     _isDataLoaded.value = true // Mark data as loaded
                 }
         }
+
+        viewModelScope.launch {
+            dataRepository.appSettings
+                .distinctUntilChanged()
+                .collect { settings -> _appSettings.value = settings }
+        }
+    }
+
+    fun saveAppSettings(settings: AppSettings) {
+        viewModelScope.launch {
+            dataRepository.saveAppSettings(settings)
+        }
+    }
+
+    fun openSettings() {
+        _currentScreen.value = Screen.Settings
+    }
+
+    fun closeSettings() {
+        _currentScreen.value = Screen.PresetList
     }
 
     /**
@@ -99,7 +123,11 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                     val currentStatus = state?.status ?: RunStatus.IDLE
                     if (currentStatus != lastObservedRunStatus) {
                         when (currentStatus) {
-                            RunStatus.RUNNING, RunStatus.PAUSED, RunStatus.DONE -> {
+                            RunStatus.PREROLL,
+                            RunStatus.RUNNING,
+                            RunStatus.PAUSED,
+                            RunStatus.OVERTIME,
+                            RunStatus.DONE -> {
                                 if (_currentScreen.value != Screen.PresetEditor) {
                                     _currentScreen.value = Screen.Timer
                                 }
@@ -212,6 +240,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     enum class Screen {
         PresetList,
         Timer,
-        PresetEditor
+        PresetEditor,
+        Settings,
     }
 }

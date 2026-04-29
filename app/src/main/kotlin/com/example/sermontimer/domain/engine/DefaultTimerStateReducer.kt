@@ -28,11 +28,33 @@ class DefaultTimerStateReducer : TimerStateReducer {
         current: TimerState,
         command: TimerCommand.Start
     ): TimerStateReducer.ReductionResult {
-        if (current.status == RunStatus.RUNNING) {
+        if (current.status == RunStatus.RUNNING || current.status == RunStatus.PREROLL || current.status == RunStatus.OVERTIME) {
             return TimerStateReducer.ReductionResult(current)
         }
         val presetMeta = command.preset.toActivePresetMeta()
         val durations = presetMeta.durations
+        val prerollSec = command.prerollSec.coerceAtLeast(0)
+        val overtimeMaxSec = command.overtimeMaxSec.coerceAtLeast(0)
+
+        if (prerollSec > 0) {
+            val prerollState = TimerState(
+                status = RunStatus.PREROLL,
+                segment = Segment.INTRO,
+                remainingInSegmentSec = durations.introSec,
+                elapsedTotalSec = 0,
+                durations = durations,
+                startedAtElapsedRealtime = command.monotonicStartMs,
+                activePreset = presetMeta,
+                prerollRemainingSec = prerollSec,
+                prerollTotalSec = prerollSec,
+                overtimeMaxSec = overtimeMaxSec,
+            )
+            return TimerStateReducer.ReductionResult(
+                prerollState,
+                listOf(TimerEvent.PrerollStarted),
+            )
+        }
+
         var newState = TimerState(
             status = RunStatus.RUNNING,
             segment = Segment.INTRO,
@@ -41,6 +63,7 @@ class DefaultTimerStateReducer : TimerStateReducer {
             durations = durations,
             startedAtElapsedRealtime = command.monotonicStartMs,
             activePreset = presetMeta,
+            overtimeMaxSec = overtimeMaxSec,
         )
         val events = mutableListOf<TimerEvent>()
         newState = advancePastZeroSegments(newState, events)
@@ -51,17 +74,83 @@ class DefaultTimerStateReducer : TimerStateReducer {
         current: TimerState,
         command: TimerCommand.Tick
     ): TimerStateReducer.ReductionResult {
-        if (current.status != RunStatus.RUNNING || current.startedAtElapsedRealtime == null) {
+        return when (current.status) {
+            RunStatus.PREROLL -> tickPreroll(current, command)
+            RunStatus.RUNNING -> tickRunning(current, command)
+            RunStatus.OVERTIME -> tickOvertime(current, command)
+            else -> TimerStateReducer.ReductionResult(current)
+        }
+    }
+
+    private fun tickPreroll(
+        current: TimerState,
+        command: TimerCommand.Tick,
+    ): TimerStateReducer.ReductionResult {
+        val baseline = current.startedAtElapsedRealtime ?: return TimerStateReducer.ReductionResult(current)
+        val elapsed = secondsBetween(baseline, command.monotonicNowMs)
+        if (elapsed >= current.prerollTotalSec) {
+            // Preroll done — transition to RUNNING, baseline = now.
+            val running = current.copy(
+                status = RunStatus.RUNNING,
+                segment = Segment.INTRO,
+                remainingInSegmentSec = current.durations.introSec,
+                elapsedTotalSec = 0,
+                startedAtElapsedRealtime = command.monotonicNowMs,
+                prerollRemainingSec = 0,
+                prerollTotalSec = 0,
+            )
+            val events = mutableListOf<TimerEvent>(TimerEvent.PrerollEnded)
+            val advanced = advancePastZeroSegments(running, events)
+            return TimerStateReducer.ReductionResult(advanced, events)
+        }
+        val remaining = (current.prerollTotalSec - elapsed).coerceAtLeast(0)
+        if (remaining == current.prerollRemainingSec) {
             return TimerStateReducer.ReductionResult(current)
         }
+        return TimerStateReducer.ReductionResult(
+            current.copy(prerollRemainingSec = remaining),
+        )
+    }
+
+    private fun tickRunning(
+        current: TimerState,
+        command: TimerCommand.Tick,
+    ): TimerStateReducer.ReductionResult {
+        val baseline = current.startedAtElapsedRealtime ?: return TimerStateReducer.ReductionResult(current)
         val totalSec = current.durations.totalSec
-        val elapsedSinceBaselineSec =
-            secondsBetween(current.startedAtElapsedRealtime, command.monotonicNowMs)
+        val elapsedSinceBaselineSec = secondsBetween(baseline, command.monotonicNowMs)
         val newElapsed = min(totalSec, elapsedSinceBaselineSec)
         if (newElapsed <= current.elapsedTotalSec) {
             return TimerStateReducer.ReductionResult(current)
         }
-        return updateProgress(current, newElapsed)
+        return updateProgress(current, newElapsed, command.monotonicNowMs)
+    }
+
+    private fun tickOvertime(
+        current: TimerState,
+        command: TimerCommand.Tick,
+    ): TimerStateReducer.ReductionResult {
+        val baseline = current.startedAtElapsedRealtime ?: return TimerStateReducer.ReductionResult(current)
+        val elapsed = secondsBetween(baseline, command.monotonicNowMs)
+        if (elapsed >= current.overtimeMaxSec) {
+            // Cap reached — go to DONE.
+            val done = current.copy(
+                status = RunStatus.DONE,
+                overtimeElapsedSec = current.overtimeMaxSec,
+                startedAtElapsedRealtime = null,
+            )
+            return TimerStateReducer.ReductionResult(
+                done,
+                listOf(TimerEvent.OvertimeCapped, TimerEvent.Completed),
+            )
+        }
+        val capped = elapsed.coerceAtMost(current.overtimeMaxSec)
+        if (capped == current.overtimeElapsedSec) {
+            return TimerStateReducer.ReductionResult(current)
+        }
+        return TimerStateReducer.ReductionResult(
+            current.copy(overtimeElapsedSec = capped),
+        )
     }
 
     private fun handlePause(
@@ -75,7 +164,11 @@ class DefaultTimerStateReducer : TimerStateReducer {
         val elapsedSinceBaseline =
             secondsBetween(current.startedAtElapsedRealtime, command.monotonicNowMs)
         val newElapsed = min(totalSec, elapsedSinceBaseline)
-        val (updatedState, events) = updateProgress(current, newElapsed)
+        val (updatedState, events) = updateProgress(current, newElapsed, command.monotonicNowMs)
+        if (updatedState.status != RunStatus.RUNNING) {
+            // Hit completion / overtime mid-pause — keep that transition.
+            return TimerStateReducer.ReductionResult(updatedState, events)
+        }
         val pausedState = updatedState.copy(
             status = RunStatus.PAUSED,
             startedAtElapsedRealtime = null,
@@ -107,6 +200,22 @@ class DefaultTimerStateReducer : TimerStateReducer {
         current: TimerState,
         command: TimerCommand.SkipSegment
     ): TimerStateReducer.ReductionResult {
+        // Skipping during PREROLL = start the timer immediately.
+        if (current.status == RunStatus.PREROLL) {
+            val durations = current.durations
+            val running = current.copy(
+                status = RunStatus.RUNNING,
+                segment = Segment.INTRO,
+                remainingInSegmentSec = durations.introSec,
+                elapsedTotalSec = 0,
+                startedAtElapsedRealtime = command.monotonicNowMs,
+                prerollRemainingSec = 0,
+                prerollTotalSec = 0,
+            )
+            val events = mutableListOf<TimerEvent>(TimerEvent.PrerollEnded)
+            val advanced = advancePastZeroSegments(running, events)
+            return TimerStateReducer.ReductionResult(advanced, events)
+        }
         val activePreset = current.activePreset ?: return TimerStateReducer.ReductionResult(current)
         if (!activePreset.allowSkip || current.status != RunStatus.RUNNING) {
             return if (!activePreset.allowSkip) {
@@ -124,8 +233,7 @@ class DefaultTimerStateReducer : TimerStateReducer {
             elapsedTotalSec = newElapsed,
             startedAtElapsedRealtime = adjustBaseline(command.monotonicNowMs, newElapsed),
         )
-        val (stateAfterProgress, progressEvents) = updateProgress(recalibrated, newElapsed)
-        return TimerStateReducer.ReductionResult(stateAfterProgress, progressEvents)
+        return updateProgress(recalibrated, newElapsed, command.monotonicNowMs)
     }
 
     private fun handleStop(current: TimerState): TimerStateReducer.ReductionResult {
@@ -154,12 +262,13 @@ class DefaultTimerStateReducer : TimerStateReducer {
             elapsedTotalSec = max(current.elapsedTotalSec, newElapsed),
             startedAtElapsedRealtime = adjustBaseline(command.atMonotonicMs, newElapsed),
         )
-        return updateProgress(adjusted, adjusted.elapsedTotalSec)
+        return updateProgress(adjusted, adjusted.elapsedTotalSec, command.atMonotonicMs)
     }
 
     private fun updateProgress(
         state: TimerState,
         newElapsed: Int,
+        nowMonotonicMs: Long,
     ): TimerStateReducer.ReductionResult {
         val durations = state.durations
         val events = mutableListOf<TimerEvent>()
@@ -171,13 +280,27 @@ class DefaultTimerStateReducer : TimerStateReducer {
             events += TimerEvent.BoundaryReached(completedSegment, next)
         }
         if (newElapsed >= durations.totalSec) {
-            newState = newState.copy(
-                status = RunStatus.DONE,
-                segment = Segment.DONE,
-                remainingInSegmentSec = 0,
-                startedAtElapsedRealtime = null,
-            )
-            if (!events.any { it is TimerEvent.Completed }) {
+            newState = if (state.overtimeMaxSec > 0) {
+                newState.copy(
+                    status = RunStatus.OVERTIME,
+                    segment = Segment.DONE,
+                    remainingInSegmentSec = 0,
+                    elapsedTotalSec = durations.totalSec,
+                    startedAtElapsedRealtime = nowMonotonicMs,
+                    overtimeElapsedSec = 0,
+                )
+            } else {
+                newState.copy(
+                    status = RunStatus.DONE,
+                    segment = Segment.DONE,
+                    remainingInSegmentSec = 0,
+                    startedAtElapsedRealtime = null,
+                )
+            }
+            if (newState.status == RunStatus.OVERTIME) {
+                events += TimerEvent.OvertimeStarted
+            }
+            if (!events.any { it is TimerEvent.Completed } && newState.status == RunStatus.DONE) {
                 events += TimerEvent.Completed
             }
             return TimerStateReducer.ReductionResult(newState, events)
@@ -201,14 +324,26 @@ class DefaultTimerStateReducer : TimerStateReducer {
             val boundaryElapsed = state.durations.cumulativeBoundaryFor(completed)
             accumulator += TimerEvent.BoundaryReached(completed, next)
             if (next == Segment.DONE) {
-                state = state.copy(
-                    status = RunStatus.DONE,
-                    segment = Segment.DONE,
-                    remainingInSegmentSec = 0,
-                    elapsedTotalSec = state.durations.totalSec,
-                    startedAtElapsedRealtime = null,
-                )
-                accumulator += TimerEvent.Completed
+                if (state.overtimeMaxSec > 0) {
+                    state = state.copy(
+                        status = RunStatus.OVERTIME,
+                        segment = Segment.DONE,
+                        remainingInSegmentSec = 0,
+                        elapsedTotalSec = state.durations.totalSec,
+                        startedAtElapsedRealtime = state.startedAtElapsedRealtime,
+                        overtimeElapsedSec = 0,
+                    )
+                    accumulator += TimerEvent.OvertimeStarted
+                } else {
+                    state = state.copy(
+                        status = RunStatus.DONE,
+                        segment = Segment.DONE,
+                        remainingInSegmentSec = 0,
+                        elapsedTotalSec = state.durations.totalSec,
+                        startedAtElapsedRealtime = null,
+                    )
+                    accumulator += TimerEvent.Completed
+                }
             } else {
                 state = state.copy(
                     elapsedTotalSec = boundaryElapsed,

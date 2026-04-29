@@ -63,6 +63,49 @@ class HapticPatterns(private val context: Context) {
         vibrator.vibrate(effect, feedbackAttributes)
     }
 
+    /** Distinct cue when the preroll countdown ends and the actual sermon timer begins.
+     *  Uses USAGE_ALARM so it bypasses DND/silent — the user explicitly relies on this
+     *  cue to know the sermon timer just started. */
+    fun playPrerollEndedPattern() {
+        if (!vibrator.hasVibrator()) return
+        Log.i("HAPTIC", "playPrerollEndedPattern: firing")
+        val effect = VibrationEffect.createWaveform(
+            PREROLL_END_PATTERN.first,
+            PREROLL_END_PATTERN.second,
+            -1,
+        )
+        vibrator.vibrate(effect, alarmAttributes)
+    }
+
+    /** Distinct cue when the timer crosses the configured total and overtime begins. */
+    fun playOvertimeStartedPattern() {
+        if (!vibrator.hasVibrator()) return
+        val effect = VibrationEffect.createWaveform(
+            OVERTIME_START_PATTERN.first,
+            OVERTIME_START_PATTERN.second,
+            -1,
+        )
+        vibrator.vibrate(effect, alarmAttributes)
+    }
+
+    /** Soft single tap — used to confirm Start, Pause, Resume actions. */
+    fun playLightTick() {
+        if (!vibrator.hasVibrator()) return
+        val effect = VibrationEffect.createOneShot(60L, 140)
+        vibrator.vibrate(effect, feedbackAttributes)
+    }
+
+    /** Subtle paired tap — used when the timer first starts (or preroll begins). */
+    fun playStartPattern() {
+        if (!vibrator.hasVibrator()) return
+        val effect = VibrationEffect.createWaveform(
+            START_PATTERN.first,
+            START_PATTERN.second,
+            -1,
+        )
+        vibrator.vibrate(effect, feedbackAttributes)
+    }
+
     /**
      * Start countdown haptics as a single waveform of N pulses (N in 1..10).
      * This avoids per-second scheduling and keeps working with screen off/Doze.
@@ -125,6 +168,25 @@ class HapticPatterns(private val context: Context) {
                 200
             ), // wait 0ms, vibrate 200ms, wait 100ms, vibrate 200ms, wait 100ms, vibrate 200ms
             intArrayOf(0, 200, 0, 200, 0, 200)       // amplitude for each segment
+        )
+
+        // Start: gentle paired tap — "ready, set" feel.
+        private val START_PATTERN = Pair(
+            longArrayOf(0, 60, 80, 100),
+            intArrayOf(0, 160, 0, 200),
+        )
+
+        // Preroll-ended: confident "GO!" — three escalating buzzes the preacher feels
+        // even with screen off and DND on (uses USAGE_ALARM at the call site).
+        private val PREROLL_END_PATTERN = Pair(
+            longArrayOf(0, 200, 80, 250, 80, 450),
+            intArrayOf(0, 200, 0, 230, 0, 255),
+        )
+
+        // Overtime-started: urgent — three rapid stronger pulses.
+        private val OVERTIME_START_PATTERN = Pair(
+            longArrayOf(0, 180, 80, 180, 80, 180, 80, 400),
+            intArrayOf(0, 255, 0, 255, 0, 255, 0, 255),
         )
 
         // Long-short-long: final completion pattern

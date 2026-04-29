@@ -7,14 +7,14 @@ plugins {
 
 android {
     namespace = "com.example.sermontimer"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.sermontimer"
         minSdk = 30
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 35
+        versionCode = 11
+        versionName = "1.10"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.core.splashscreen)
     implementation(libs.wear.ongoing)
+    implementation(libs.wear.watchface.complications.data.source.ktx)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.junit4)
     testImplementation(libs.truth)

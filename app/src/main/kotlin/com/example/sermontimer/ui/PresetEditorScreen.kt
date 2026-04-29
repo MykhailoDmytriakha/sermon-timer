@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,8 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.foundation.ExperimentalWearFoundationApi
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.foundation.rememberActiveFocusRequester
+import androidx.wear.compose.foundation.rotary.RotaryScrollableDefaults
+import androidx.wear.compose.foundation.rotary.rotaryScrollable
 import androidx.wear.compose.material.Button
+import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.CompactButton
 import androidx.wear.compose.material.Icon
@@ -38,6 +45,7 @@ import androidx.wear.compose.material.TimeText
 import com.example.sermontimer.R
 import com.example.sermontimer.domain.model.Preset
 
+@OptIn(ExperimentalWearFoundationApi::class)
 @Composable
 fun PresetEditorScreen(
     preset: Preset?,
@@ -92,14 +100,22 @@ fun PresetEditorScreen(
 
     // Show either the main editor or delete confirmation
     if (showDeleteConfirmation && preset != null) {
-        // Simple delete confirmation screen
+        val deleteState = rememberScalingLazyListState()
+        val deleteFocusRequester = rememberActiveFocusRequester()
         Scaffold(
-            timeText = { TimeText() }
+            timeText = { TimeText() },
+            positionIndicator = { PositionIndicator(scalingLazyListState = deleteState) },
         ) {
             ScalingLazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                state = deleteState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .rotaryScrollable(
+                        behavior = RotaryScrollableDefaults.behavior(scrollableState = deleteState),
+                        focusRequester = deleteFocusRequester,
+                    ),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 item {
                     Text(
@@ -159,13 +175,22 @@ fun PresetEditorScreen(
         }
     } else {
         // Main editor screen
+        val editorState = rememberScalingLazyListState()
+        val editorFocusRequester = rememberActiveFocusRequester()
         Scaffold(
-            timeText = { TimeText() }
+            timeText = { TimeText() },
+            positionIndicator = { PositionIndicator(scalingLazyListState = editorState) },
         ) {
             ScalingLazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                state = editorState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .rotaryScrollable(
+                        behavior = RotaryScrollableDefaults.behavior(scrollableState = editorState),
+                        focusRequester = editorFocusRequester,
+                    ),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 item {
                     // Title
@@ -374,30 +399,40 @@ private fun DurationInputField(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "$label: $value ${stringResource(R.string.minutes_label)}",
-            style = MaterialTheme.typography.body1,
-            textAlign = TextAlign.Center
+            text = "$label · $value ${stringResource(R.string.minutes_label)}",
+            style = MaterialTheme.typography.title3,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            CompactButton(
+            Button(
                 onClick = { if (value > 0) onValueChange(value - 1) },
-                colors = ButtonDefaults.secondaryButtonColors()
+                enabled = value > 0,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.secondaryButtonColors(),
             ) {
-                Text("-")
+                Text(
+                    text = "−1m",
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            CompactButton(
+            Button(
                 onClick = { onValueChange(value + 1) },
-                colors = ButtonDefaults.secondaryButtonColors()
+                modifier = Modifier.weight(1f),
             ) {
-                Text("+")
+                Text(
+                    text = "+1m",
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
 

@@ -326,6 +326,14 @@ class SermonTileService : TileService() {
         val chipColors: ChipColors
 
         when (status) {
+            RunStatus.PREROLL -> {
+                buttonAction = TileButtonAction.VIEW_PROGRESS
+                buttonText = getString(R.string.action_view_progress)
+                buttonDescription = getString(R.string.phase_preroll)
+                targetPresetId = null
+                chipColors = snapshotColors.secondaryChip
+            }
+
             RunStatus.RUNNING -> {
                 buttonAction = TileButtonAction.VIEW_PROGRESS
                 buttonText = getString(R.string.action_view_progress)
@@ -340,6 +348,14 @@ class SermonTileService : TileService() {
                 buttonDescription = getString(R.string.tile_timer_paused)
                 targetPresetId = null
                 chipColors = snapshotColors.primaryChip
+            }
+
+            RunStatus.OVERTIME -> {
+                buttonAction = TileButtonAction.VIEW_PROGRESS
+                buttonText = getString(R.string.action_view_progress)
+                buttonDescription = getString(R.string.phase_overtime)
+                targetPresetId = null
+                chipColors = snapshotColors.secondaryChip
             }
 
             RunStatus.DONE -> {

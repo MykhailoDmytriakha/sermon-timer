@@ -27,6 +27,43 @@
     <string name="notification_exact_alarm_needed">Enable alarms access for reliable countdown</string>
     <string name="ongoing_status_running">%1$s • %2$s</string>
     <string name="ongoing_status_paused">Paused • %1$s</string>
+    <!-- Live ongoing-activity templates: #remaining# is a live-ticking TimerPart slot.
+         Keep templates short — long templates may not render on small chip slots. -->
+    <string name="ongoing_status_running_live">#remaining#</string>
+    <string name="ongoing_status_running_live_paused">⏸ #remaining#</string>
+    <string name="ongoing_status_preroll_live">⏱ #remaining#</string>
+    <string name="ongoing_status_overtime_live">+#remaining#</string>
+
+    <!-- Preroll / Overtime -->
+    <string name="phase_preroll">Get Ready</string>
+    <string name="phase_preroll_short">Prep</string>
+    <string name="phase_overtime">Overtime</string>
+    <string name="phase_overtime_short">+OT</string>
+    <string name="notification_preroll_text">Starting in %1$s</string>
+    <string name="notification_overtime_text">Over by %1$s</string>
+    <string name="timer_secondary_preroll">Tap skip to start now</string>
+    <string name="timer_secondary_preroll_with_total">Total %1$s · skip to start</string>
+    <string name="timer_secondary_overtime">Cap %1$s</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_button">Settings</string>
+    <string name="settings_preroll_label">Preroll</string>
+    <string name="settings_preroll_description">Prep countdown before the timer starts. Tap Skip on Preroll to start now.</string>
+    <string name="settings_overtime_label">Overtime</string>
+    <string name="settings_overtime_description">How long the timer keeps running after total time. Counts up from 0.</string>
+    <string name="settings_off">Off</string>
+    <string name="settings_increment">Increase</string>
+    <string name="settings_decrement">Decrease</string>
+
+    <!-- Preset list -->
+    <string name="preset_summary_total_with_breakdown">Total %1$s · %2$s + %3$s + %4$s</string>
+    <string name="preset_summary_breakdown_only">%1$s + %2$s + %3$s</string>
+    <!-- Settings stepper buttons -->
+    <string name="settings_minus_minute">−1m</string>
+    <string name="settings_plus_minute">+1m</string>
+    <string name="settings_minus_seconds">−%1$ds</string>
+    <string name="settings_plus_seconds">+%1$ds</string>
 
     <!-- Actions -->
     <string name="action_pause">Pause</string>
@@ -87,4 +124,11 @@ Tap Back to return to the list.</string>
     <string name="set_default_preset_message">Set "%1$s" as the default preset? It will appear at the top of the list.</string>
     <string name="set_default_preset_confirm">Set Default</string>
     <string name="set_default_preset_cancel">Cancel</string>
+
+    <!-- Complication -->
+    <string name="complication_label">Sermon Timer</string>
+    <string name="complication_description">Live countdown of the active sermon timer</string>
+    <string name="complication_idle_text">Start</string>
+    <string name="complication_paused">Paused %1$s</string>
+    <string name="complication_preview_description">Sermon timer remaining</string>
 </resources>

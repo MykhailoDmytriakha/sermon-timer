@@ -142,6 +142,58 @@ yarn -s >/dev/null 2>&1 || true  # (если есть фронт-инструм�
 **AVD:** Wear OS Large Round, **API 34 / Android 14**, Services = **Google Play Store**, образ: *Wear OS 5 ARM64 v8a*.
 **Реальные часы:** Developer Options → ADB over Wi‑Fi → `adb connect <ip>:5555`.
 
+### 7.1 Рабочий рецепт подключения Galaxy Watch по Wireless Debugging
+
+Если `adb pair <ip>:<pairing_port> <code>` на стандартном ADB server (`5037`) падает с
+`error: protocol fault (couldn't read status message): Undefined error: 0`, но `ping <ip>` и
+`nc -vz <ip> <pairing_port>` проходят, используйте отдельный clean ADB server на другом порту.
+Это сработало для Galaxy Watch 5 (`SM_R920`) 2026-04-29.
+
+На часах:
+
+* Developer options → включить `ADB debugging`, `Wireless debugging`.
+* Включить `Turn off automatic Wi‑Fi`, чтобы часы не сбрасывали Wi‑Fi во время pairing.
+* Открыть `Wireless debugging` → `Pair new device` и держать экран pairing открытым.
+* Записать **pairing** `ip:port` и 6-значный код. Pairing-port и connection-port разные.
+
+На Mac:
+
+```bash
+# Terminal 1: отдельный ADB server, не конфликтующий с 5037
+adb -P 5038 nodaemon server
+
+# Terminal 2: pairing через этот же server
+adb -P 5038 pair <watch_ip>:<pairing_port> <pairing_code>
+
+# Проверить, какой connection-port объявили часы
+adb -P 5038 mdns services
+adb -P 5038 devices -l
+
+# Установить уже собранный debug APK
+adb -P 5038 install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Проверенный успешный пример:
+
+```text
+adb -P 5038 pair 10.0.0.16:40283 751664
+Successfully paired to 10.0.0.16:40283 [guid=adb-RFAT629H4WY-wREsuI]
+
+adb -P 5038 mdns services
+adb-RFAT629H4WY-wREsuI  _adb-tls-connect._tcp  10.0.0.16:40415
+
+adb -P 5038 devices -l
+adb-RFAT629H4WY-wREsuI._adb-tls-connect._tcp device product:projectxblue model:SM_R920 device:projectxbl
+
+adb -P 5038 install -r app/build/outputs/apk/debug/app-debug.apk
+Performing Streamed Install
+Success
+```
+
+Если `adb -P 5038 nodaemon server` не стартует из-за занятого порта, выберите другой порт (`5039`,
+`5040`) и используйте его во всех командах через `-P`. После работы foreground server можно остановить
+`Ctrl-C`; если нужно оставить соединение живым для следующих команд, не закрывайте Terminal 1.
+
 ---
 
 ## 8) Стандарты кодирования
