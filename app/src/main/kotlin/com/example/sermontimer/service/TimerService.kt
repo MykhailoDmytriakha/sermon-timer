@@ -535,13 +535,39 @@ class TimerService : Service() {
     }
 
     private fun scheduleOrRunCountdown(state: TimerState) {
-        if (state.status != RunStatus.RUNNING || state.startedAtElapsedRealtime == null) {
+        val baselineMs = state.startedAtElapsedRealtime
+        if (baselineMs == null) {
             resetCountdownScheduling()
             return
         }
 
-        val boundarySec = state.durations.cumulativeBoundaryFor(state.segment)
-        val boundaryAtMs = state.startedAtElapsedRealtime + boundarySec * 1000L
+        // Compute the next "boundary" — the moment we need an alarm for:
+        //   RUNNING:  end of current segment (Intro/Main/Outro)
+        //   OVERTIME: end of overtime cap (becomes DONE)
+        // PREROLL/PAUSED/IDLE/DONE: no upcoming boundary, cancel any scheduled.
+        val boundaryAtMs: Long
+        val secondsRemaining: Int
+        when (state.status) {
+            RunStatus.RUNNING -> {
+                val boundarySec = state.durations.cumulativeBoundaryFor(state.segment)
+                boundaryAtMs = baselineMs + boundarySec * 1000L
+                secondsRemaining = state.remainingInSegmentSec
+            }
+            RunStatus.OVERTIME -> {
+                // Overtime baseline (set in updateProgress when entering overtime) is the
+                // moment the cap timer started. The cap fires at baseline + overtimeMaxSec.
+                // Without scheduling this alarm the only way to advance to DONE is the
+                // 1 s tick coroutine, which Samsung Freecess can freeze on long sessions —
+                // observed live: overtime ran ~14 min instead of capping at 5.
+                boundaryAtMs = baselineMs + state.overtimeMaxSec * 1000L
+                secondsRemaining = (state.overtimeMaxSec - state.overtimeElapsedSec)
+                    .coerceAtLeast(0)
+            }
+            else -> {
+                resetCountdownScheduling()
+                return
+            }
+        }
         val triggerAtMs = boundaryAtMs - COUNTDOWN_WINDOW_MS
         val now = timeProvider.elapsedRealtimeMillis()
 
@@ -550,19 +576,19 @@ class TimerService : Service() {
         // by the platform on long sermons.
         boundaryTickScheduler.schedule(boundaryAtMs)
 
-        if (state.remainingInSegmentSec > COUNTDOWN_SECONDS) {
+        if (secondsRemaining > COUNTDOWN_SECONDS) {
             if (triggerAtMs <= now) {
                 startCountdownForBoundary(boundaryAtMs)
             } else if (scheduledCountdownForBoundaryMs != boundaryAtMs) {
                 android.util.Log.d(
                     "TIMER",
-                    "COUNTDOWN: scheduling at t=$triggerAtMs for boundary=$boundaryAtMs"
+                    "COUNTDOWN: scheduling at t=$triggerAtMs for boundary=$boundaryAtMs (status=${state.status})"
                 )
                 countdownScheduler.schedule(triggerAtMs, boundaryAtMs)
                 scheduledCountdownForBoundaryMs = boundaryAtMs
                 immediateCountdownStartedForBoundaryMs = null
             }
-        } else if (state.remainingInSegmentSec in 1..COUNTDOWN_SECONDS) {
+        } else if (secondsRemaining in 1..COUNTDOWN_SECONDS) {
             startCountdownForBoundary(boundaryAtMs)
         } else {
             resetCountdownScheduling()

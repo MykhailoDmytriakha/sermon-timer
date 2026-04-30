@@ -22,7 +22,20 @@ adb -s emulator-5554 shell wm size                        # screen size; 454x454
 
 For a Galaxy Watch over Wi-Fi: **first‑time pairing** — `AGENTS.md §7.1` (uses a clean `adb -P 5038/5039 nodaemon server` and a 6‑digit code). **Reconnecting an already‑paired watch in a new session** — `AGENTS.md §7.1.1` (no code needed; `adb -P 5039 mdns services` → pick the right `_adb-tls-connect._tcp` endpoint → `adb -P 5039 connect <ip>:<port>`). Galaxy Watch 5 advertises `model:SM_R920 product:projectxblue` — use that to confirm you reached the watch, not the emulator.
 
-**Wireless port changes when the watch sleeps.** The dynamic adb port (e.g. `41987`) is reissued every time the watch reconnects to Wi-Fi after going idle. If `adb -P 5039 devices -l` shows the watch missing or `connect` returns "Connection refused", the watch slept; ask the user to wake it (tap face / press power) and *then* re-run `adb -P 5039 mdns services` to find the new port. Don't loop reconnecting on the old port — it won't come back.
+**Wireless port changes when the watch sleeps.** The dynamic adb port (e.g. `41987`) is reissued every time the watch reconnects to Wi-Fi after going idle. If `adb -P 5039 devices -l` shows the watch missing or `connect` returns "Connection refused", the watch slept and the port is dead.
+
+### Finding the watch's current adb port
+
+Try the recipes in this order — the first hits cover most cases without bothering the user:
+
+1. **Cached connection.** `adb -P 5039 devices -l` may still show the watch from a previous session if you didn't explicitly `adb disconnect`. If `model:SM_R920` is listed as `device` (not `offline`), reuse that port directly.
+2. **Last known port retry.** Try `adb -P 5039 connect 10.0.0.16:<lastport>` from your previous session. Fails fast (~1 s) with `connection refused` / `host is down` if the port is dead — cheap to attempt before bothering the user.
+3. **mDNS scan.** `adb -P 5039 mdns services` — looks for `_adb-tls-connect._tcp` advertisements. **Caveat:** Galaxy Watch only broadcasts mDNS when *Settings → Developer options → Wireless debugging* is currently on screen, OR for ~30 s after the watch reconnects to Wi-Fi. In steady-state operation this command returns empty even when the watch is reachable — don't rely on it as a primary discovery method. The list is keyed by serial like `adb-RFAT...:tls-connect`; pair that with the IP from `arp -a` to extract the port.
+4. **Ask the user.** When all above fail, ask them to wake the watch (tap face / button press) and read the port off *Settings → Developer options → Wireless debugging → IP address & port*. They can also send the value via "! adb -P 5039 connect ..." or just paste the IP:port. This is the reliable fallback — Wear OS does not expose any external API that lets a host machine resolve the dynamic port without user-side cooperation.
+
+**Don't loop-retry the same dead port.** Connect failures cache for ~15 s in some cases. Two failed `connect` calls = the port really is dead; ask user.
+
+**Don't run `nmap` / network sweeps.** Wear OS subnets are typically shared with the user's other devices; scanning is invasive and slower than asking.
 
 For everything below, assume `-s emulator-5554`. Substitute the device serial (`10.0.0.16:<port>` for the watch) and add `-P 5039` if you're going through the dedicated server.
 
