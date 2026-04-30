@@ -68,11 +68,13 @@ class TimerService : Service() {
     private lateinit var hapticPatterns: HapticPatterns
     private lateinit var tileUpdateRequester: TileUpdateRequester
     private lateinit var countdownScheduler: CountdownAlarmScheduler
+    private lateinit var boundaryTickScheduler: BoundaryTickScheduler
 
     private var timerJob: Job? = null
     private val notificationManager by lazy { getSystemService(NOTIFICATION_SERVICE) as NotificationManager }
     private val powerManager by lazy { getSystemService(POWER_SERVICE) as PowerManager }
     private var sessionWakeLock: PowerManager.WakeLock? = null
+    private var isForegrounded = false
 
     // Guard for engine initialization race condition
     private var engineReady = false
@@ -138,11 +140,13 @@ class TimerService : Service() {
         const val ACTION_RESUME = "com.example.sermontimer.RESUME"
         const val ACTION_SKIP = "com.example.sermontimer.SKIP"
         const val ACTION_STOP = "com.example.sermontimer.STOP"
-        private const val ACTION_COUNTDOWN_ALARM = "com.example.sermontimer.COUNTDOWN_ALARM"
+        const val ACTION_REATTACH_FGS = "com.example.sermontimer.REATTACH_FGS"
+        const val ACTION_COUNTDOWN_ALARM = "com.example.sermontimer.COUNTDOWN_ALARM"
+        const val ACTION_BOUNDARY_TICK = "com.example.sermontimer.BOUNDARY_TICK"
 
         // Intent extras
         const val EXTRA_PRESET_ID = "preset_id"
-        private const val EXTRA_COUNTDOWN_BOUNDARY_AT = "countdown_boundary_at"
+        const val EXTRA_COUNTDOWN_BOUNDARY_AT = "countdown_boundary_at"
 
         fun startService(context: Context, presetId: String) {
             val intent = Intent(context, TimerService::class.java).apply {
@@ -184,12 +188,28 @@ class TimerService : Service() {
             context.startService(intent)
         }
 
-        internal fun createCountdownIntent(context: Context, boundaryAtElapsedMs: Long): Intent {
-            return Intent(context, TimerService::class.java).apply {
-                action = ACTION_COUNTDOWN_ALARM
-                putExtra(EXTRA_COUNTDOWN_BOUNDARY_AT, boundaryAtElapsedMs)
+        /**
+         * User-initiated re-foreground. Called from MainActivity when the activity
+         * resumes and detects an active timer state in DataStore — this happens after
+         * the system / Samsung Freecess has killed the FGS during a long sermon, which
+         * leaves our notification posted but stripped of the FOREGROUND_SERVICE flag,
+         * which in turn drops the Galaxy Watch Now bar chip.
+         *
+         * The activity-driven `startForegroundService` call grants the FGS exemption
+         * even on Android 14+, so onStartCommand can promote without
+         * ForegroundServiceStartNotAllowedException.
+         */
+        fun reattachForeground(context: Context) {
+            val intent = Intent(context, TimerService::class.java).apply {
+                action = ACTION_REATTACH_FGS
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
             }
         }
+
     }
 
     override fun onCreate() {
@@ -207,6 +227,10 @@ class TimerService : Service() {
             onTrigger = { boundaryAtMs -> onCountdownAlarmFired(boundaryAtMs) },
             onExactAlarmAccessMissing = { markExactAlarmAccessMissing() },
             onExactAlarmAccessRestored = { clearExactAlarmAccessWarning() },
+        )
+        boundaryTickScheduler = BoundaryTickScheduler(
+            context = this,
+            onTrigger = { boundaryAtMs -> onBoundaryAlarmFired(boundaryAtMs) },
         )
 
         // Try to recover state from DataStore
@@ -226,17 +250,47 @@ class TimerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Start foreground service immediately to prevent timeout
-        val initialState = TimerState.idle(SegmentDurations(0, 0, 0))
-        val notification = createNotification(initialState)
+        val action = intent?.action
 
-        val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, fgsType)
+        // Foreground promotion is gated on Android 14+ by mAllowStartForeground.
+        // Exemption sources we use:
+        //   - ACTION_START / null: user tap or system restart of FGS
+        //   - ACTION_REATTACH_FGS: MainActivity.onResume re-attach (user-initiated)
+        //   - ACTION_PAUSE/RESUME/SKIP/STOP: notification action click (user-init.)
+        //   - ACTION_COUNTDOWN_ALARM / ACTION_BOUNDARY_TICK: alarm-trigger via
+        //     BoundaryTickReceiver / CountdownAlarmReceiver, which inherit the
+        //     FGS-from-alarm exemption per Android 12+ docs (broadcast-mediated).
+        // The try/catch below stays as defense in depth — Samsung Wear OS may
+        // ignore exemptions in some power states; if startForeground throws we
+        // log and continue rather than crash the whole service.
+        val foregroundEligible = !isForegrounded && when (action) {
+            ACTION_START, ACTION_REATTACH_FGS, null -> true
+            ACTION_PAUSE, ACTION_RESUME, ACTION_SKIP, ACTION_STOP -> true
+            ACTION_COUNTDOWN_ALARM, ACTION_BOUNDARY_TICK -> true
+            else -> false
+        }
+        if (foregroundEligible) {
+            try {
+                val initialState = TimerState.idle(SegmentDurations(0, 0, 0))
+                val notification = createNotification(initialState)
+                val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, fgsType)
+                isForegrounded = true
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w(
+                    "SRV",
+                    "startForeground refused for action=$action; processing in background mode",
+                    e,
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("SRV", "startForeground failed unexpectedly", e)
+            }
+        }
 
-        when (intent?.action) {
+        when (action) {
             ACTION_START -> {
-                val presetId = intent.getStringExtra(EXTRA_PRESET_ID)
+                val presetId = intent?.getStringExtra(EXTRA_PRESET_ID)
                 if (presetId != null) {
                     serviceScope.launch {
                         startTimerWithPreset(presetId)
@@ -248,8 +302,14 @@ class TimerService : Service() {
             ACTION_RESUME -> safeSubmit(TimerCommand.Resume(timeProvider.elapsedRealtimeMillis()))
             ACTION_SKIP -> safeSubmit(TimerCommand.SkipSegment(timeProvider.elapsedRealtimeMillis()))
             ACTION_STOP -> stopTimer()
+            ACTION_REATTACH_FGS -> {
+                // No engine work — the only side-effect we wanted was
+                // startForeground above, which restores the chip on Now bar
+                // after Samsung Freecess killed the previous FGS.
+                android.util.Log.d("TIMER", "REATTACH_FGS handled, isForegrounded=$isForegrounded")
+            }
             ACTION_COUNTDOWN_ALARM -> {
-                val boundaryAtMs = intent.getLongExtra(EXTRA_COUNTDOWN_BOUNDARY_AT, -1L)
+                val boundaryAtMs = intent?.getLongExtra(EXTRA_COUNTDOWN_BOUNDARY_AT, -1L) ?: -1L
                 if (boundaryAtMs > 0) {
                     android.util.Log.d(
                         "TIMER",
@@ -258,6 +318,19 @@ class TimerService : Service() {
                     countdownScheduler.handlePendingIntentTrigger(boundaryAtMs)
                 } else {
                     android.util.Log.w("TIMER", "COUNTDOWN: missing boundary extra in alarm intent")
+                }
+            }
+
+            ACTION_BOUNDARY_TICK -> {
+                val boundaryAtMs = intent?.getLongExtra(EXTRA_COUNTDOWN_BOUNDARY_AT, -1L) ?: -1L
+                if (boundaryAtMs > 0) {
+                    android.util.Log.d(
+                        "TIMER",
+                        "BOUNDARY_TICK: pending intent fired for boundary=$boundaryAtMs"
+                    )
+                    boundaryTickScheduler.handlePendingIntentTrigger(boundaryAtMs)
+                } else {
+                    android.util.Log.w("TIMER", "BOUNDARY_TICK: missing boundary extra in alarm intent")
                 }
             }
 
@@ -318,6 +391,7 @@ class TimerService : Service() {
             @Suppress("DEPRECATION")
             stopForeground(true)
         }
+        isForegrounded = false
     }
 
     /**
@@ -434,6 +508,7 @@ class TimerService : Service() {
                         @Suppress("DEPRECATION")
                         stopForeground(true)
                     }
+                    isForegrounded = false
                     stopSelf()
                 }
             }
@@ -470,6 +545,11 @@ class TimerService : Service() {
         val triggerAtMs = boundaryAtMs - COUNTDOWN_WINDOW_MS
         val now = timeProvider.elapsedRealtimeMillis()
 
+        // Always re-arm the boundary alarm (idempotent). This is the safety net that
+        // forces a state transition even if the in-process tick coroutine is frozen
+        // by the platform on long sermons.
+        boundaryTickScheduler.schedule(boundaryAtMs)
+
         if (state.remainingInSegmentSec > COUNTDOWN_SECONDS) {
             if (triggerAtMs <= now) {
                 startCountdownForBoundary(boundaryAtMs)
@@ -492,6 +572,22 @@ class TimerService : Service() {
     private fun onCountdownAlarmFired(boundaryAtMs: Long) {
         android.util.Log.d("TIMER", "COUNTDOWN: alarm fired for boundary=$boundaryAtMs")
         startCountdownForBoundary(boundaryAtMs)
+    }
+
+    /**
+     * Boundary alarm fired — the system woke us at the exact segment boundary moment.
+     * Submit a fresh Tick so the reducer recomputes elapsed/remaining from the
+     * monotonic baseline and emits BoundaryReached. This is the recovery path when
+     * the in-process tick coroutine has been suspended (Samsung Freecess / deep doze
+     * on a long sermon).
+     */
+    private fun onBoundaryAlarmFired(boundaryAtMs: Long) {
+        val now = timeProvider.elapsedRealtimeMillis()
+        android.util.Log.d(
+            "TIMER",
+            "BOUNDARY_TICK: alarm fired (boundary=$boundaryAtMs, now=$now, delta=${now - boundaryAtMs}ms)",
+        )
+        safeSubmit(TimerCommand.Tick(now))
     }
 
     private fun startCountdownForBoundary(boundaryAtMs: Long) {
@@ -528,6 +624,7 @@ class TimerService : Service() {
 
     private fun resetCountdownScheduling() {
         countdownScheduler.cancel()
+        boundaryTickScheduler.cancel()
         scheduledCountdownForBoundaryMs = null
         immediateCountdownStartedForBoundaryMs = null
     }

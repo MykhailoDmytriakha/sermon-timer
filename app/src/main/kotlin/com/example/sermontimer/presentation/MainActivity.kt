@@ -70,6 +70,13 @@ class MainActivity : ComponentActivity() {
             requiresBurnInProtection = false
         )
         maybeRequestNotificationPermission()
+        // NOTE: NOT auto-prompting for IGNORE_BATTERY_OPTIMIZATIONS in onCreate.
+        // The system intent opens a Settings activity that immediately pauses
+        // our MainActivity → "Activity pause timeout" + the timer UI never
+        // renders. We declare the permission in the manifest so user can grant
+        // it manually via Settings → Apps → Sermon Timer → Battery, but we
+        // don't force the dialog. The BroadcastReceiver-mediated alarm path is
+        // the primary persistence mechanism and works without this exemption.
 
         // Handle tile actions from intent
         handleIntent(intent)
@@ -114,6 +121,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // If the engine is still mid-session in DataStore but the foreground service
+        // got killed by the platform (Samsung Freecess on Galaxy Watch is aggressive
+        // during long sermons), the Now bar chip vanishes because the notification
+        // loses the FOREGROUND_SERVICE flag. We can't re-foreground from background
+        // on Android 14+, but a user-driven Activity launch IS allowed to promote.
+        // So whenever the user opens the app and we observe an active state, kick
+        // the service via startForegroundService(ACTION_REATTACH_FGS) — this gets
+        // chip back onto the watch face without resetting the timer baseline.
+        activityScope.launch {
+            try {
+                val lastState = TimerDataProvider.getRepository().lastTimerState.first()
+                if (lastState != null && lastState.isActive) {
+                    TimerService.reattachForeground(this@MainActivity)
+                }
+            } catch (_: Exception) {
+                // No-op: reattach is best-effort, never block UI on it.
+            }
+        }
+    }
+
     override fun onDestroy() {
         lifecycle.removeObserver(ambientObserver)
         super.onDestroy()
@@ -129,4 +158,5 @@ class MainActivity : ComponentActivity() {
         ) return
         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
+
 }

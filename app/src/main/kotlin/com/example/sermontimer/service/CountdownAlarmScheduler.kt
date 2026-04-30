@@ -3,6 +3,7 @@ package com.example.sermontimer.service
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -91,9 +92,16 @@ class CountdownAlarmScheduler(
             return false
         }
 
-        val intent = TimerService.createCountdownIntent(context, boundaryAtElapsedMs)
+        // Route the alarm trigger through a BroadcastReceiver. Direct
+        // `PendingIntent.getService` bypasses the FGS-from-alarm exemption on
+        // Android 12+, which makes our service crash with
+        // ForegroundServiceStartNotAllowedException after the platform has
+        // killed the previous FGS. The receiver path inherits the exemption.
+        val intent = Intent(context, CountdownAlarmReceiver::class.java).apply {
+            putExtra(BoundaryTickReceiver.EXTRA_BOUNDARY_AT_MS, boundaryAtElapsedMs)
+        }
         val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        val pi = PendingIntent.getService(context, REQUEST_CODE, intent, flags)
+        val pi = PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
         pendingIntent = pi
         return try {
             alarmManager.setExactAndAllowWhileIdle(

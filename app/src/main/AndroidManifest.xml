@@ -17,6 +17,14 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!--
+        REQUEST_IGNORE_BATTERY_OPTIMIZATIONS lets us prompt the user once to whitelist
+        the app from Doze. Helps but does NOT fully neutralise Samsung Freecess (a
+        separate, more aggressive layer on Galaxy Watch). The bigger persistence fix
+        is the BroadcastReceiver-mediated alarm path that re-promotes FGS after kill;
+        battery whitelist is defense-in-depth that simply lowers kill frequency.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
@@ -74,6 +82,21 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="timer-countdown-haptics" />
         </service>
+
+        <!--
+            BroadcastReceiver-mediated alarm triggers. Required because
+            PendingIntent.getService directly does NOT inherit the FGS-from-alarm
+            exemption on Android 12+; the service-start has to be routed through a
+            BroadcastReceiver.onReceive that calls startForegroundService(...).
+            Both receivers are exported=false: only the system AlarmManager fires
+            them via PendingIntent, no other app should be able to deliver intents.
+        -->
+        <receiver
+            android:name=".service.BoundaryTickReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".service.CountdownAlarmReceiver"
+            android:exported="false" />
 
         <service
             android:name=".tile.SermonTileService"

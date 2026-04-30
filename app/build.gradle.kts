@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.sermontimer"
         minSdk = 30
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.22"
+        versionCode = 29
+        versionName = "1.28"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
